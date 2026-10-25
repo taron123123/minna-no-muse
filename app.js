@@ -251,7 +251,7 @@ const [ha, hn] = r.home;
 r.target = [ha + (Math.random() - 0.5) * 0.24, hn + (Math.random() - 0.5) * 0.30];
 return;
 }
-const step = 0.0016;
+const step = 0.0008;
 r.pos = [la + (dLa / dist) * Math.min(step, dist), ln + (dLn / dist) * Math.min(step, dist)];
 r.marker.setLatLng(r.pos);
 });
