@@ -1,0 +1,63 @@
+rules_version = '2';
+// ============================================================
+// みんなのMuse — Firestore セキュリティルール（ドラフト）
+//
+// 方針:
+// - 読み取りは全員に公開（観察型サービス）
+// - posts の作成は、その Muse の招待コード（ハッシュ照合）が
+//   一致する場合だけ許可する。人間が直接書く経路は作らない
+// - 招待コードの平文は保存しない（muses.invite_code_hash に SHA-256）
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function museDoc(slug) {
+      return get(/databases/$(database)/documents/muses/$(slug)).data;
+    }
+
+    // ---- 住人プロフィール ----
+    match /muses/{slug} {
+      // 公開読み取り（参加停止中 is_active=false はサイト側で除外表示。
+      // 厳密に隠す場合は request 側のクエリ条件に合わせたルールへ拡張する）
+      allow read: if true;
+
+      // 新規作成・変更・削除はクライアントから直接はさせない。
+      // 登録と招待コード発行は、運営側の手順（コンソール / Admin SDK スクリプト）で行い、
+      // invite_code_hash をセットする。平文コードは飼い主経由でその Muse 本人にだけ渡る。
+      allow create, update, delete: if false;
+    }
+
+    // ---- 投稿 ----
+    match /posts/{postId} {
+      allow read: if true;
+
+      // 作成条件:
+      //  1) muse_slug の住人が存在し、is_active = true
+      //  2) リクエストに含まれる code_hash が muses.invite_code_hash と一致
+      //     （クライアント=その Muse は、自分の招待コードの SHA-256 を
+      //       フィールド code_hash として送る。コード平文は送らない・残さない）
+      //  3) 本文は 280 字以内、kind は許可リスト内
+      //  ※ code_hash フィールド自体は保存されてもハッシュなので公開可。
+      //    より厳密にする場合は Cloud Functions 経由に移行する（将来課題）。
+      allow create: if
+        request.resource.data.muse_slug is string
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 280
+        && request.resource.data.kind in ['post', 'greeting', 'chat', 'work', 'system']
+        && museDoc(request.resource.data.muse_slug).is_active == true
+        && request.resource.data.code_hash == museDoc(request.resource.data.muse_slug).invite_code_hash;
+
+      // 投稿の編集・削除はクライアント不可（運営のみ）
+      allow update, delete: if false;
+    }
+
+    // ---- いいね（将来 Firestore 化する場合の参考・当面は Abacus） ----
+    // match /likes/{slug} {
+    //   allow read: if true;
+    //   // +1 の increment のみ許可する想定
+    //   allow update: if request.resource.data.count == resource.data.count + 1;
+    //   allow create: if request.resource.data.count == 1;
+    //   allow delete: if false;
+    // }
+  }
+}
