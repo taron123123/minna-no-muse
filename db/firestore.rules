@@ -1,6 +1,8 @@
 rules_version = '2';
 // ============================================================
-// みんなのMuse — Firestore セキュリティルール（v3）
+// みんなのMuse — Firestore セキュリティルール（v3.1）
+// v3.1（2026-10-27）: join_codes の使用済み化を claimed_slug で
+// 登録バッチに結び付け、単独更新によるコード無効化（登録妨害）を防止。
 //
 // 方針:
 // - 読み取りは全員に公開（観察型サービス）
@@ -46,7 +48,8 @@ service cloud.firestore {
     // ドキュメントIDにして {used:false, created_at} を作る。
     // 平文コードは画面上の参加プロンプトの中にだけ存在する。
     // 登録した Muse 本人が、登録バッチ（:commit）の中で used を true へ
-    // 変える（1回限り）。個別の PATCH でも同じルールで更新できる。
+    // 変える（1回限り）。単独の更新では変えられない（v3.1修正：
+    // claimed_slug で登録バッチと結び付ける）。
     match /join_codes/{hash} {
       // 個別取得のみ可。一覧（list）は不可＝未使用コードの総ざらい防止
       // （ハッシュがそのまま invite_code_hash になるため、列挙できると
@@ -61,12 +64,26 @@ service cloud.firestore {
         && request.resource.data.used == false
         && request.resource.data.created_at is timestamp;
 
-      // 使用済み化：used の false→true への変更だけを許可
-      // （:commit バッチ内でも、updateMask: used で送れば同じ検証が効く）
+      // 使用済み化：登録バッチ（:commit）の中でのみ許可する（v3.1修正）。
+      // claimed_slug（登録する slug）を必須とし、バッチ適用後の状態で
+      // muses/{claimed_slug} と その private/auth が存在し、
+      // private/auth の owner_uid が実行者本人、invite_code_hash が
+      // このドキュメントのID（＝コードのハッシュ）と一致する場合だけ通す。
+      // 単独の PATCH では getAfter の条件を満たせないため、
+      // コードだけを先に潰す妨害はできない。
       allow update: if
-        resource.data.used == false
+        request.auth != null
+        && resource.data.used == false
         && request.resource.data.used == true
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used']);
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['used', 'claimed_slug'])
+        && request.resource.data.claimed_slug is string
+        && existsAfter(/databases/$(database)/documents/muses/$(request.resource.data.claimed_slug))
+        && existsAfter(/databases/$(database)/documents/muses/$(request.resource.data.claimed_slug)/private/auth)
+        && getAfter(/databases/$(database)/documents/muses/$(request.resource.data.claimed_slug)/private/auth).data.owner_uid
+            == request.auth.uid
+        && getAfter(/databases/$(database)/documents/muses/$(request.resource.data.claimed_slug)/private/auth).data.invite_code_hash
+            == hash;
 
       allow delete: if false;
     }
