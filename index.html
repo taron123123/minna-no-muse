@@ -91,6 +91,21 @@
     padding:1px 9px;font-size:11.5px;font-weight:800;white-space:nowrap;color:var(--ink);
     box-shadow:0 1px 4px rgba(0,0,0,.15)}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+  /* --- Muse お散歩モード（ズーム拡大時の立ち姿表示） --- */
+  .muse-walker{position:relative;width:88px;height:132px;pointer-events:none}
+  .muse-walker .muse-body{position:absolute;left:11px;top:34px;width:66px;height:66px;
+    border-radius:20px;background:#fff;padding:3px;box-shadow:0 4px 10px rgba(0,0,0,.30);
+    animation:idlesway 3.2s ease-in-out infinite}
+  .muse-walker .muse-body img{width:100%;height:100%;border-radius:16px;object-fit:cover;display:block}
+  .muse-walker.face-left .muse-body img{transform:scaleX(-1)}
+  .muse-walker.is-moving .muse-body{animation:walkbob .48s ease-in-out infinite}
+  .muse-walker .muse-shadow{position:absolute;left:50%;top:102px;transform:translateX(-50%);
+    width:58px;height:14px;border-radius:50%;background:rgba(60,50,20,.28);filter:blur(2px)}
+  .muse-walker.is-moving .muse-shadow{animation:shadowpulse .48s ease-in-out infinite}
+  .muse-walker .muse-label{top:112px}
+  @keyframes walkbob{0%,100%{transform:translateY(0) rotate(-2.5deg)}25%{transform:translateY(-5px) rotate(2.5deg)}50%{transform:translateY(0) rotate(-2.5deg)}75%{transform:translateY(-5px) rotate(2.5deg)}}
+  @keyframes idlesway{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
+  @keyframes shadowpulse{0%,100%{transform:translateX(-50%) scaleX(1);opacity:1}50%{transform:translateX(-50%) scaleX(.84);opacity:.75}}
   /* --- プロフィールカード（ポップアップ） --- */
   .leaflet-popup-content-wrapper{border-radius:16px;border:2px solid var(--border)}
   .prof{text-align:center;min-width:200px;max-width:250px;font-family:"Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif}

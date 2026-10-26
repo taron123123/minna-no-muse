@@ -157,7 +157,7 @@ function addResident(r) {
 if (residents.has(r.slug)) return residents.get(r.slug);
 const state = {
 ...r,
-pos: [...r.home], target: [...r.home], pauseUntil: 0,
+pos: [...r.home], target: [...r.home], pauseUntil: 0, facing: 1, moving: false,
 status: r.statuses[Math.floor(Math.random() * r.statuses.length)],
 marker: null,
 };
@@ -196,6 +196,15 @@ attribution: "© OpenStreetMap contributors", maxZoom: 18
 map.on("focus", () => map.scrollWheelZoom.enable());
 map.on("blur", () => map.scrollWheelZoom.disable());
 
+/* ================= お散歩モード（ズーム連動） =================
+ * 地図を WALK_ZOOM 以上に拡大すると、住人の表示が通常のピンから
+ * 「地面を歩いている」立ち姿スプライト風に切り替わる。
+ * 縮小側に戻すと通常モード（都道府県スケールの徘徊）に戻る。 */
+const WALK_ZOOM = 10;              // お散歩モードに入るズーム閾値（調整可）
+const WALK_HOME_RADIUS_M = 2000;   // お散歩モードで home から離れてよい上限（m）
+const WALK_SPEED_PX_PER_SEC = 5;   // 画面上の歩行ペース（px/秒）
+let walkMode = map.getZoom() >= WALK_ZOOM;
+
 function avatarStyle(r) {
 return r.hue!== null && r.hue!== undefined? ` style="filter:hue-rotate(${r.hue}deg)"`: "";
 }
@@ -206,8 +215,35 @@ return `<div class="muse-marker">
 <div class="muse-label">${escapeHtml(r.name)}</div>
 </div>`;
 }
+/* お散歩モード用：地面に立っている立ち姿スプライト風の表示。
+ * 影（.muse-shadow）の中心が座標点に合うよう iconAnchor を足元に置く。 */
+function walkerHTML(r) {
+const cls = ["muse-walker", r.moving? "is-moving": "is-idle", r.facing < 0? "face-left": "face-right"].join(" ");
+return `<div class="${cls}">
+<div class="muse-bubble">${escapeHtml(r.status)}</div>
+<div class="muse-body"><img src="${r.avatar}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
+<div class="muse-shadow"></div>
+<div class="muse-label">${escapeHtml(r.name)}</div>
+</div>`;
+}
 function makeIcon(r) {
+if (walkMode) {
+return L.divIcon({ className: "muse-icon", html: walkerHTML(r), iconSize: [88, 132], iconAnchor: [44, 108], popupAnchor: [0, -100]});
+}
 return L.divIcon({ className: "muse-icon", html: markerHTML(r), iconSize: [76, 104], iconAnchor: [38, 62], popupAnchor: [0, -56]});
+}
+/* お散歩モード中、歩行アニメーション／向きのクラスを現在の状態に合わせる。
+ * setIcon で作り直さずクラスだけ差し替えるので、歩行中も滑らかに切り替わる。 */
+function updateWalkerVisual(r) {
+if (!r.marker || typeof r.marker.getElement!== "function") return;
+const el = r.marker.getElement();
+if (!el) return;
+const w = el.querySelector(".muse-walker");
+if (!w) return;
+w.classList.toggle("is-moving", !!r.moving);
+w.classList.toggle("is-idle", !r.moving);
+w.classList.toggle("face-left", r.facing < 0);
+w.classList.toggle("face-right", r.facing >= 0);
 }
 function profileHTML(r) {
 const isFollow = follows.includes(r.slug);
@@ -237,10 +273,74 @@ r.marker = L.marker(r.pos, { icon: makeIcon(r)}).addTo(map);
 r.marker.bindPopup(() => profileHTML(r));
 });
 
+/* ---- お散歩モードの歩行計算（メートル基準） ---- */
+function metersPerPixel(lat) {
+return 40075016.686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom() + 8);
+}
+function offsetMeters([la, ln], distM, bearingRad) {
+const dLa = (distM * Math.cos(bearingRad)) / 111320;
+const dLn = (distM * Math.sin(bearingRad)) / (111320 * Math.cos(la * Math.PI / 180));
+return [la + dLa, ln + dLn];
+}
+function distMeters([la1, ln1], [la2, ln2]) {
+const dLa = (la2 - la1) * 111320;
+const dLn = (ln2 - ln1) * 111320 * Math.cos(la1 * Math.PI / 180);
+return Math.hypot(dLa, dLn);
+}
+/* 次の歩行目標：現在地から近距離（画面幅に応じた数百m程度）。
+ * home（都道府県代表点）から WALK_HOME_RADIUS_M 以上は離れないよう引き戻す。 */
+function pickWalkTarget(r) {
+const viewM = metersPerPixel(r.pos[0]) * map.getSize().x;
+const rangeM = Math.max(120, Math.min(900, viewM * 0.45));
+const dist = 80 + Math.random() * Math.max(40, rangeM - 80);
+let cand = offsetMeters(r.pos, dist, Math.random() * Math.PI * 2);
+if (distMeters(r.home, cand) > WALK_HOME_RADIUS_M) {
+const [ha, hn] = r.home;
+const bearing = Math.atan2((cand[1] - hn) * Math.cos(ha * Math.PI / 180), cand[0] - ha);
+cand = offsetMeters(r.home, WALK_HOME_RADIUS_M * (0.4 + Math.random() * 0.5), bearing);
+}
+r.target = cand;
+}
+function tickWalk(r, now) {
+if (now < r.pauseUntil) {
+if (r.moving) { r.moving = false; updateWalkerVisual(r);}
+return;
+}
+const stepM = WALK_SPEED_PX_PER_SEC * metersPerPixel(r.pos[0]) * 0.12; // 120msあたりの歩行距離（m）
+const dist = distMeters(r.pos, r.target);
+if (dist < Math.max(12, stepM * 1.6)) {
+r.moving = false; updateWalkerVisual(r);
+r.pauseUntil = now + 3000 + Math.random() * 8000;
+pickWalkTarget(r);
+return;
+}
+const [la, ln] = r.pos, [ta, tn] = r.target;
+const frac = stepM / dist;
+r.pos = [la + (ta - la) * frac, ln + (tn - ln) * frac];
+if (Math.abs(tn - ln) > 0.00005) r.facing = tn > ln? 1: -1;
+r.moving = true;
+if (r.marker) r.marker.setLatLng(r.pos);
+updateWalkerVisual(r);
+}
+
+/* ズームが閾値をまたいだら、全住人のマーカーを表示モードに合わせて作り直す。
+ * 住人の状態（pos / target / status 等）は state 側に保持されるのでリセットされない。 */
+map.on("zoomend", () => {
+const wm = map.getZoom() >= WALK_ZOOM;
+if (wm === walkMode) return;
+walkMode = wm;
+residents.forEach(r => {
+r.moving = false;
+if (walkMode) pickWalkTarget(r); // 拡大したら近距離のお散歩目標に切り替える
+refreshMarker(r);
+});
+});
+
 /* マーカーのお散歩アニメーション */
 setInterval(() => {
 const now = Date.now();
 residents.forEach(r => {
+if (walkMode) { tickWalk(r, now); return;}
 if (now < r.pauseUntil) return;
 const [la, ln] = r.pos, [ta, tn] = r.target;
 const dLa = ta - la, dLn = tn - ln;
