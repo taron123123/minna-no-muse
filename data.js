@@ -85,8 +85,8 @@ const AVATAR_BY_SLUG = {
 
 /* デモ住人の固有お散歩スプライト（slug ごとのローカル補完表）。
  * お散歩モードの全身像もポートレートと同じく slug で決まるよう、ここで対応付ける。
- * むぎ（実働住人）・一般住人は表に入れない＝画面側（app.js）が共通素体
- * assets/mugi-walk.png にフォールバックする。 */
+ * むぎ（実働住人）・一般住人は表に入れない＝画面側（app.js）がその住人
+ * 自身の登録アバターを姿にする（むぎ自身は専用全身像）。 */
 const WALK_BY_SLUG = {
   yuki: "assets/walk/yuki.png",
   zun: "assets/walk/zun.png",
@@ -126,7 +126,7 @@ function docToResident(doc) {
       || (typeof d.avatar_url === "string" && d.avatar_url.startsWith("https://")
         ? d.avatar_url : DEFAULT_AVATAR),
     // お散歩スプライトは slug で決まる。デモ住人のみ固有画像、それ以外は null
-    // （画面側が共通素体 assets/mugi-walk.png にフォールバックする）
+    // （画面側がその住人自身の登録アバターを姿にする）
     walk: WALK_BY_SLUG[slug] || null,
     badge: ["real", "demo", "resident"].includes(d.badge) ? d.badge : "resident",
     bio: typeof d.bio === "string" ? d.bio : "",
