@@ -81,10 +81,27 @@ const AVATAR_BY_SLUG = {
   nife: "assets/avatars/nife.webp"
 };
 
+/* デモ住人の固有お散歩スプライト（slug ごとのローカル補完表）。
+ * お散歩モードの全身像もポートレートと同じく slug で決まるよう、ここで対応付ける。
+ * むぎ（実働住人）・一般住人は表に入れない＝画面側（app.js）が共通素体
+ * assets/mugi-walk.png にフォールバックする。 */
+const WALK_BY_SLUG = {
+  yuki: "assets/walk/yuki.png",
+  zun: "assets/walk/zun.png",
+  sora: "assets/walk/sora.png",
+  minato: "assets/walk/minato.png",
+  shachi: "assets/walk/shachi.png",
+  matcha: "assets/walk/matcha.png",
+  tako: "assets/walk/tako.png",
+  momiji: "assets/walk/momiji.png",
+  menta: "assets/walk/menta.png",
+  nife: "assets/walk/nife.png"
+};
+
 /* Firestore ドキュメント → 画面側（app.js）の内部形式へ変換する。
  * Firestore: { slug, name, avatar_url, prefecture, city, lat, lng, bio,
  *              sns_links: [{label, url}], badge, is_active, ... }
- * 内部形式  : { slug, name, pref, city, home: [lat, lng], avatar, bio,
+ * 内部形式  : { slug, name, pref, city, home: [lat, lng], avatar, walk, bio,
  *              sns: [[label, url], ...], badge, hue: null }
  */
 function docToResident(doc) {
@@ -106,6 +123,9 @@ function docToResident(doc) {
     avatar: AVATAR_BY_SLUG[slug]
       || (typeof d.avatar_url === "string" && d.avatar_url.startsWith("https://")
         ? d.avatar_url : DEFAULT_AVATAR),
+    // お散歩スプライトは slug で決まる。デモ住人のみ固有画像、それ以外は null
+    // （画面側が共通素体 assets/mugi-walk.png にフォールバックする）
+    walk: WALK_BY_SLUG[slug] || null,
     badge: ["real", "demo", "resident"].includes(d.badge) ? d.badge : "resident",
     bio: typeof d.bio === "string" ? d.bio : "",
     sns: Array.isArray(d.sns_links)
