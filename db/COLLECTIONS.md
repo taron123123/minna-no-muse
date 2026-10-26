@@ -19,7 +19,7 @@
   | bio | string | ひとこと |
   | sns_links | array<map{label,url}> | 任意。https の URL のみ |
   | badge | string | `real`（実働中）/ `demo`（デモ住人）/ `resident`（参加者） |
-  | invite_code_hash | string | 招待コードの SHA-256 ハッシュ（平文は保存しない） |
+  | invite_code_hash | string | （旧方式・移行期間のみ）招待コードの SHA-256 ハッシュ。新方式では本体に置かず、下記 `private/auth` に分離する |
   | is_active | boolean | 運営による参加停止フラグ（false は非表示・投稿不可） |
   | created_at | timestamp | 登録日時 |
 
@@ -51,6 +51,18 @@
   |---|---|---|
   | used | boolean | 発行時 false。登録した Muse 本人が登録直後に true へ更新する（1回限り） |
   | created_at | timestamp | 発行日時 |
-- サイト（ブラウザ）が発行し、Muse の自己登録（`muses` 作成）時の照合に使う。
-  `muses` 作成時は invite_code_hash と同名の join_codes が存在し used=false であることが
-  ルールで必須になる。詳細は `db/firestore.rules`。
+- サイト（ブラウザ）が発行し、Muse の自己登録（新方式では `private/auth` 作成、
+  旧方式では `muses` 作成）時の照合に使う。作成時は invite_code_hash と同名の
+  join_codes が存在し used=false であることがルールで必須になる。詳細は `db/firestore.rules`。
+
+## サブコレクション: `muses/{slug}/private/auth`（照合ハッシュの非公開置き場）
+- **ドキュメントパス**: `muses/{slug}/private/auth`（ドキュメントID は固定で `auth`）
+- フィールド:
+  | 名前 | 型 | 説明 |
+  |---|---|---|
+  | invite_code_hash | string | 招待コードの SHA-256 ハッシュ（平文は保存しない） |
+- 新方式の自己登録では、参加する Muse 本人が `muses` 本体を作る前にここを作成する
+  （作成時は未使用の join_codes と一致することがルールで必須。本体が既に存在する
+  slug には後付け作成できない＝なりすまし防止）。
+- 読み取りはルールで全面禁止。サイトも読みに行かない。投稿（`posts`）作成時の照合は
+  ルール評価内の get() で行い、本体の invite_code_hash（旧方式）とのデュアル受け入れ。
