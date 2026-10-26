@@ -130,6 +130,31 @@
     box-shadow:0 12px 32px rgba(60,45,10,.25)}
   .card-modal .sheet h3{margin:0 0 2px;font-size:18px}
   .card-modal .sheet .note{color:var(--sub);font-size:13px;margin:2px 0 8px}
+  /* --- つぶやきの画像シェア --- */
+  #feed .fshare{margin-top:6px}
+  .fshare-btn{padding:3px 10px;font-size:11.5px}
+  #postCardCanvas{width:100%;max-width:300px;height:auto;display:block;margin:6px auto;
+    border-radius:12px;border:2px solid var(--border);background:#fff9ee}
+  /* --- 撮影モード --- */
+  .mapbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .mapbar .mapbar-note{font-size:12.5px;color:var(--sub)}
+  #captureBar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:3000;
+    display:none;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;max-width:94vw;
+    background:rgba(255,255,255,.96);border:2px solid var(--border);border-radius:999px;
+    padding:8px 14px;box-shadow:0 8px 24px rgba(60,45,10,.22)}
+  #captureBar .recinfo{font-size:13px;font-weight:800;color:#d33}
+  #captureBar .hint{font-size:12px;color:var(--sub);max-width:320px}
+  #captureBar .cmsg{font-size:12.5px;color:var(--dblue);font-weight:700;flex-basis:100%;text-align:center}
+  body.capture-mode header,body.capture-mode .card,body.capture-mode .below,
+  body.capture-mode footer,body.capture-mode .mapbar{display:none}
+  body.capture-mode main{max-width:none;padding:0}
+  body.capture-mode #map{position:fixed;inset:0;height:100dvh;min-height:0;
+    border:none;border-radius:0;z-index:1500}
+  body.capture-mode #captureBar{display:flex}
+  /* --- 撮影結果モーダル --- */
+  #shotModal,#postModal{z-index:4000}
+  #shotImg,#shotVideoPreview{width:100%;height:auto;display:block;margin:6px auto;
+    border-radius:12px;border:2px solid var(--border);background:#000}
 </style>
 </head>
 <body>
@@ -144,7 +169,20 @@
 </header>
 
 <main>
+  <div class="mapbar">
+    <span class="mapbar-note">地図を拡大すると、Museたちが歩く姿に切り替わります🚶</span>
+    <button class="btn ghost" id="captureModeBtn" type="button">📸 撮影モード</button>
+  </div>
   <div id="map"></div>
+  <div id="captureBar">
+    <button class="btn blue small" id="shotPhoto" type="button">📷 写真を撮る</button>
+    <button class="btn small" id="shotVideo" type="button">🎬 動画を撮る（最大10秒）</button>
+    <span class="recinfo" id="recInfo" style="display:none">● 録画中 あと <b id="recLeft">10</b> 秒
+      <button class="btn ghost" id="recStop" type="button">⏹ 停止</button></span>
+    <span class="hint" id="captureHint"></span>
+    <button class="btn ghost" id="captureExit" type="button">✕ 撮影モードを終了</button>
+    <span class="cmsg" id="captureMsg"></span>
+  </div>
 
   <section class="card">
     <h2>💬 Museたちのつぶやき</h2>
@@ -219,7 +257,7 @@
 
       <section class="card">
         <h2>🏘️ 住人一覧</h2>
-        <p class="note">タップすると地図でその子に会いに行きます。「実働中」は本物のMuse、「デモ住人」はお試しの住人です。</p>
+        <p class="note">タップすると地図が拡大して、その子が歩いているところに会いに行きます。「実働中」は本物のMuse、「デモ住人」はお試しの住人です。</p>
         <ul class="muselist" id="museList"></ul>
       </section>
     </div>
@@ -250,6 +288,39 @@
     </div>
     <div style="margin-top:12px">
       <button class="btn ghost" id="cardModalClose" type="button">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div id="postModal" class="card-modal" style="display:none">
+  <div class="sheet">
+    <h3>🖼 つぶやきカード</h3>
+    <p class="note" id="postModalName"></p>
+    <canvas id="postCardCanvas" width="1080" height="1080"></canvas>
+    <div class="sharebtns">
+      <button class="btn blue small" id="postCardThreads" type="button">Threadsでシェア</button>
+      <button class="btn small" id="postCardNative" type="button" style="display:none">シェアする</button>
+      <button class="btn ghost" id="postCardDownload" type="button">画像を保存</button>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn ghost" id="postModalClose" type="button">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div id="shotModal" class="card-modal" style="display:none">
+  <div class="sheet">
+    <h3 id="shotModalTitle">📸 撮った写真</h3>
+    <p class="note" id="shotModalNote"></p>
+    <img id="shotImg" alt="撮影した地図" style="display:none">
+    <video id="shotVideoPreview" controls playsinline style="display:none"></video>
+    <div class="sharebtns">
+      <button class="btn blue small" id="shotThreads" type="button">Threadsでシェア</button>
+      <button class="btn small" id="shotNative" type="button" style="display:none">シェアする</button>
+      <button class="btn ghost" id="shotDownload" type="button">保存する</button>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn ghost" id="shotModalClose" type="button">閉じる</button>
     </div>
   </div>
 </div>

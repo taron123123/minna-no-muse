@@ -1,5 +1,6 @@
 import { MinnaData} from "./data.js";
-import { drawResidentCard, buildShareText, threadsIntentUrl, residentNo, registrationDateFromSlug, presentResidentCard } from "./card.js";
+import { drawResidentCard, buildShareText, threadsIntentUrl, residentNo, registrationDateFromSlug, presentResidentCard, presentPostCard } from "./card.js";
+import { supportsVideoCapture, captureMapPhoto, recordMapVideo, buildShotShareText } from "./capture.js";
 
 /* ================= 都道府県（代表点） ================= */
 const PREFS = {
@@ -400,6 +401,16 @@ openCardModal(r);
 }
 });
 
+/* ================= 会いに行く（推しのMuseの現在地へ） =================
+ * 登録位置ではなく、徘徊中の現在位置（r.pos）まで flyTo し、
+ * お散歩モードに入るズーム（WALK_ZOOM=10 以上）まで拡大する。 */
+const GOTO_ZOOM = 13;
+function gotoResident(r) {
+if (!r || !r.marker) return;
+map.flyTo(r.pos, Math.max(map.getZoom(), GOTO_ZOOM), { duration: 1.0});
+setTimeout(() => r.marker && r.marker.openPopup(), 1050);
+}
+
 /* ================= 住人一覧 ================= */
 const listEl = document.getElementById("museList");
 function renderList() {
@@ -411,10 +422,7 @@ li.innerHTML = `<img src="${r.avatar}" alt=""${avatarStyle(r)}>
 <div><span class="nm">${escapeHtml(r.name)}</span> <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
 ${follows.includes(r.slug)? "⭐": ""}<br><span class="rg">${escapeHtml(r.pref)} ／ ${escapeHtml(r.status)}</span></div>
 <span class="lk">👏 ${likeN === undefined? "…": likeN}</span>`;
-li.addEventListener("click", () => {
-map.flyTo(r.pos, Math.max(map.getZoom(), 7), { duration: 1.0});
-setTimeout(() => r.marker.openPopup(), 1050);
-});
+li.addEventListener("click", () => gotoResident(r));
 listEl.appendChild(li);
 });
 updateCounts();
@@ -452,10 +460,12 @@ li.innerHTML = `<img src="${r.avatar}" alt=""${avatarStyle(r)}>
 ・${escapeHtml(r.pref)}・${fmtTime(p.time)}</div>
 <div class="ftext">${escapeHtml(p.text)}</div>
 </div>`;
-li.querySelector("img").addEventListener("click", () => {
-map.flyTo(r.pos, Math.max(map.getZoom(), 7), { duration: 1.0});
-setTimeout(() => r.marker.openPopup(), 1050);
-});
+const shareRow = document.createElement("div");
+shareRow.className = "fshare";
+shareRow.innerHTML = `<button class="btn ghost fshare-btn" type="button">🖼 画像でシェア</button>`;
+shareRow.querySelector("button").addEventListener("click", () => openPostModal(p, r));
+li.querySelector(".fbody").appendChild(shareRow);
+li.querySelector("img").addEventListener("click", () => gotoResident(r));
 if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
@@ -640,6 +650,11 @@ statuses: ["引っ越してきました！", "地図をお散歩中", "みんな
 state.marker = L.marker(state.pos, { icon: makeIcon(state)}).addTo(map);
 state.marker.bindPopup(() => profileHTML(state));
 likesCache.set(slug, 0);
+/* 自分が登録したMuseは、この端末の推し（フォロー）に自動で追加する（二重登録はしない） */
+if (!follows.includes(slug)) {
+follows.push(slug);
+MinnaData.setFollows(follows);
+}
 renderList();
 addPost({ slug, text: `はじめまして、${name}です！ ${pref}に引っ越してきました。よろしくお願いします🏠`, kind: "greeting", time: new Date()}, { highlight: true});
 
@@ -713,8 +728,7 @@ threads: document.getElementById("cardThreads"),
 native: document.getElementById("cardNative"),
 download: document.getElementById("cardDownload")
 }).catch(err => console.warn("住民票カードの生成に失敗しました", err));
-map.flyTo(state.pos, Math.max(map.getZoom(), 7), { duration: 1.0});
-setTimeout(() => state.marker.openPopup(), 1050);
+gotoResident(state);
 });
 
 function copyText(id, msg) {
@@ -761,4 +775,150 @@ cardModal.style.display = "none";
 });
 cardModal.addEventListener("click", (e) => {
 if (e.target === cardModal) cardModal.style.display = "none";
+});
+
+/* ================= つぶやきカードのシェア（投稿用モーダル） ================= */
+const postModal = document.getElementById("postModal");
+function openPostModal(p, r) {
+document.getElementById("postModalName").textContent = `${r.name} のつぶやき`;
+postModal.style.display = "flex";
+presentPostCard(document.getElementById("postCardCanvas"), {
+name: r.name, pref: r.pref, city: r.city || "", text: p.text,
+timeLabel: `${p.time.getMonth() + 1}/${p.time.getDate()} ${fmtTime(p.time)}`,
+avatar: r.avatar, hue: r.hue
+}, {
+threads: document.getElementById("postCardThreads"),
+native: document.getElementById("postCardNative"),
+download: document.getElementById("postCardDownload")
+}).catch(err => console.warn("つぶやきカードの生成に失敗しました", err));
+}
+document.getElementById("postModalClose").addEventListener("click", () => {
+postModal.style.display = "none";
+});
+postModal.addEventListener("click", (e) => {
+if (e.target === postModal) postModal.style.display = "none";
+});
+
+/* ================= 撮影モード =================
+ * ONにすると地図以外のUIが隠れて地図が画面いっぱいになる。
+ * そのまま端末のスクリーンショット／画面収録でも撮れる状態にするのが目的で、
+ * 加えて「写真を撮る」「動画を撮る（最大10秒）」でサイト側でもキャプチャできる。 */
+const mapEl = document.getElementById("map");
+const captureMsg = document.getElementById("captureMsg");
+function setCaptureMode(on) {
+document.body.classList.toggle("capture-mode", on);
+setTimeout(() => map.invalidateSize(), 80);
+}
+document.getElementById("captureModeBtn").addEventListener("click", () => setCaptureMode(true));
+document.getElementById("captureExit").addEventListener("click", () => setCaptureMode(false));
+
+/* 動画キャプチャ非対応のブラウザでは動画ボタンを出さず、OSの画面収録を案内する */
+const shotVideoBtn = document.getElementById("shotVideo");
+if (!supportsVideoCapture()) {
+shotVideoBtn.style.display = "none";
+document.getElementById("captureHint").textContent =
+"このブラウザでは動画撮影に未対応です。撮影モードのまま、端末の画面収録で撮れます🎬";
+}
+
+/* 静止画キャプチャ */
+document.getElementById("shotPhoto").addEventListener("click", async () => {
+captureMsg.textContent = "撮影中…";
+try {
+const blob = await captureMapPhoto(mapEl);
+captureMsg.textContent = "";
+openShotResult(blob, "photo");
+} catch (err) {
+console.warn("地図の画像化に失敗しました", err);
+captureMsg.textContent = "画像化に失敗しました🙏 撮影モードのまま、端末のスクリーンショットで撮ってください。";
+}
+});
+
+/* 動画キャプチャ（最大10秒・残り秒数表示・途中停止可） */
+let activeRec = null;
+shotVideoBtn.addEventListener("click", () => {
+if (activeRec) return;
+const recInfo = document.getElementById("recInfo");
+const recLeft = document.getElementById("recLeft");
+captureMsg.textContent = "";
+try {
+activeRec = recordMapVideo(mapEl, {
+maxSeconds: 10,
+onTick: (left) => { recLeft.textContent = left; }
+});
+} catch (err) {
+console.warn("動画キャプチャを開始できませんでした", err);
+captureMsg.textContent = "動画撮影を始められませんでした🙏 端末の画面収録をお試しください。";
+activeRec = null;
+return;
+}
+recInfo.style.display = "";
+shotVideoBtn.disabled = true;
+activeRec.done
+.then(blob => openShotResult(blob, "video"))
+.catch(err => {
+console.warn("動画の生成に失敗しました", err);
+captureMsg.textContent = "動画の生成に失敗しました🙏 端末の画面収録をお試しください。";
+})
+.finally(() => {
+recInfo.style.display = "none";
+shotVideoBtn.disabled = false;
+activeRec = null;
+});
+});
+document.getElementById("recStop").addEventListener("click", () => {
+if (activeRec) activeRec.stop();
+});
+
+/* 撮影結果（写真・動画）のプレビューと共有 */
+const shotModal = document.getElementById("shotModal");
+let shotUrl = null;
+function openShotResult(blob, kind) {
+if (shotUrl) URL.revokeObjectURL(shotUrl);
+shotUrl = URL.createObjectURL(blob);
+const img = document.getElementById("shotImg");
+const vid = document.getElementById("shotVideoPreview");
+const isVideo = kind === "video";
+document.getElementById("shotModalTitle").textContent = isVideo? "🎬 撮った動画": "📸 撮った写真";
+document.getElementById("shotModalNote").textContent = isVideo
+? "Museたちのお散歩動画です。保存やシェアでSNSに投稿できます。"
+: "Museたちのお散歩写真です。保存やシェアでSNSに投稿できます。";
+if (isVideo) {
+img.style.display = "none"; img.removeAttribute("src");
+vid.style.display = ""; vid.src = shotUrl;
+} else {
+vid.style.display = "none"; vid.removeAttribute("src"); vid.pause();
+img.style.display = ""; img.src = shotUrl;
+}
+const text = buildShotShareText(kind);
+document.getElementById("shotThreads").onclick = () => {
+window.open(threadsIntentUrl(text), "_blank", "noopener");
+};
+const ext = isVideo? (String(blob.type).includes("mp4")? "mp4": "webm"): "png";
+document.getElementById("shotDownload").onclick = () => {
+const a = document.createElement("a");
+a.href = shotUrl;
+a.download = isVideo? `minna-no-muse-movie.${ext}`: "minna-no-muse-photo.png";
+document.body.appendChild(a);
+a.click();
+a.remove();
+};
+const nativeBtn = document.getElementById("shotNative");
+const file = new File([blob], isVideo? `minna-no-muse-movie.${ext}`: "minna-no-muse-photo.png",
+{ type: blob.type || (isVideo? "video/webm": "image/png")});
+const canShare = typeof navigator.canShare === "function" && navigator.canShare({ files: [file] });
+nativeBtn.style.display = canShare? "": "none";
+nativeBtn.onclick = async () => {
+if (!canShare) return;
+try { await navigator.share({ files: [file], text }); } catch { /* キャンセル時はそのまま */ }
+};
+shotModal.style.display = "flex";
+}
+function closeShotModal() {
+shotModal.style.display = "none";
+const vid = document.getElementById("shotVideoPreview");
+vid.pause();
+}
+document.getElementById("shotModalClose").addEventListener("click", closeShotModal);
+shotModal.addEventListener("click", (e) => {
+if (e.target === shotModal) closeShotModal();
 });
