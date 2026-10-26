@@ -392,6 +392,81 @@ if (posts.some(p => p.text === text && Date.now() - p.time.getTime() < 30 * 6000
 addPost({ slug, text, kind: KIND_BY_PERIOD[periodOf(now)], time: now}, { highlight: true});
 }, 45000);
 
+/* ================= Firestore（共有DB）のリアルタイム反映 =================
+ * data.js の購読（MinnaData.subscribeResidents / subscribeFeed）が届いたら、
+ * 地図マーカーとフィードへマージする。
+ * Firestore が空・不通・エラーのときは null が届き、端末ローカルの
+ * シード表示（これまでの挙動）のままになる（フォールバック）。 */
+const localSlugs = new Set(residents.keys()); // 端末由来の住人（シード・自己登録・招待ゲスト）
+const remoteSlugs = new Set();               // Firestore から届いた住人
+const REMOTE_STATUSES = ["お散歩中です", "様子を見ています", "のんびり過ごしてます"];
+
+function attachMarker(state) {
+if (state.marker) return;
+state.marker = L.marker(state.pos, { icon: makeIcon(state)}).addTo(map);
+state.marker.bindPopup(() => profileHTML(state));
+}
+
+function applyRemoteResidents(list) {
+if (!list) return; // フォールバック: ローカル表示を維持
+const incoming = new Set(list.map(r => r.slug));
+// Firestore 側で無効化・削除されたリモート住人を地図から外す（端末由来の住人は残す）
+[...remoteSlugs].forEach(slug => {
+if (incoming.has(slug) || localSlugs.has(slug)) return;
+const st = residents.get(slug);
+if (st && st.marker) st.marker.remove();
+residents.delete(slug);
+remoteSlugs.delete(slug);
+});
+list.forEach(r => {
+remoteSlugs.add(r.slug);
+const home = r.home || PREFS[r.pref] || [35.6895, 139.6917];
+const cur = residents.get(r.slug);
+if (!cur) {
+const st = addResident({ ...r, home, statuses: REMOTE_STATUSES});
+attachMarker(st);
+MinnaData.getLikes(st.slug).then(n => { likesCache.set(st.slug, n); renderList();});
+} else {
+// 既存の住人（シード等）は Firestore の内容で上書きする。様子（statuses）は端末側のものを維持
+const moved = cur.home[0]!== home[0] || cur.home[1]!== home[1];
+cur.name = r.name; cur.pref = r.pref; cur.bio = r.bio;
+cur.badge = r.badge; cur.sns = r.sns; cur.home = home;
+if (r.avatar) { cur.avatar = r.avatar; cur.hue = null;}
+if (moved) {
+cur.pos = [...home]; cur.target = [...home];
+if (cur.marker) cur.marker.setLatLng(cur.pos);
+}
+refreshMarker(cur);
+}
+});
+renderList();
+flushRemoteFeed(); // 住人が揃って描けるようになったリモート投稿があれば流す
+}
+
+/* ---- リモート投稿（Firestore の posts） ---- */
+const remotePostIds = new Set();
+let pendingRemotePosts = []; // 最新スナップショット（新しい順）
+let feedPrimed = false;       // 初回スナップショットではハイライトしない
+
+function flushRemoteFeed() {
+// 古い順に prepend していくと、最終的に新しい順でフィード先頭に並ぶ
+[...pendingRemotePosts].reverse().forEach(p => {
+if (remotePostIds.has(p.id) || !residents.has(p.slug)) return;
+remotePostIds.add(p.id);
+addPost({ slug: p.slug, text: p.text, kind: p.kind, time: p.time}, { highlight: feedPrimed});
+});
+}
+
+function applyRemoteFeed(list) {
+if (!list) return; // フォールバック: ローカルのシード投稿のまま
+pendingRemotePosts = list;
+flushRemoteFeed();
+feedPrimed = true;
+}
+
+MinnaData.subscribeResidents(applyRemoteResidents);
+MinnaData.subscribeFeed(applyRemoteFeed);
+
 /* ================= 参加フォーム ================= */
 const prefSel = document.getElementById("fPref");
 Object.keys(PREFS).forEach(p => {
