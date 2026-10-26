@@ -242,7 +242,73 @@ return `<div class="muse-marker">
 function walkSrc(r) {
 if (r.walk) return r.walk;
 if (r.slug === "mugi") return WALK_AV;
-return r.avatar || WALK_AV;
+return r.walkAlpha || r.avatar || WALK_AV;
+}
+/* 背景透過処理（2026-10-27）：アバターを姿にする住人のうち、背景が透過でない
+ * （白などのベタ背景）画像は、読み込み時にサイト側で透過化する。四隅の色を
+ * 背景色とみなし、画像の縁からつながっている同系色だけを透明にするので、
+ * キャラ内部の白い部分は消えない。四隅の色がそろわない（ベタ背景と判断
+ * できない）画像や、CORS で読み込めない画像は、そのまま使う。 */
+function ensureTransparentWalk(r) {
+if (r.walk || r.slug === "mugi" || !r.avatar) return;
+if (r._alphaFor === r.avatar || r._alphaBusy) return;
+r._alphaBusy = true;
+const url = r.avatar;
+const img = new Image();
+img.crossOrigin = "anonymous";
+img.onload = () => {
+r._alphaBusy = false;
+try {
+const MAX = 512;
+const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+const w = Math.max(1, Math.round(img.naturalWidth * scale));
+const h = Math.max(1, Math.round(img.naturalHeight * scale));
+const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+const ctx = cv.getContext("2d", { willReadFrequently: true });
+ctx.drawImage(img, 0, 0, w, h);
+const idata = ctx.getImageData(0, 0, w, h);
+const d = idata.data;
+const at = (x, y) => (y * w + x) * 4;
+const corners = [at(0, 0), at(w - 1, 0), at(0, h - 1), at(w - 1, h - 1)]
+  .map(i => [d[i], d[i + 1], d[i + 2]]);
+const cdist = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+let spread = 0;
+for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++)
+  spread = Math.max(spread, cdist(corners[i], corners[j]));
+if (spread > 30) { r._alphaFor = url; return; }
+const bg = [0, 1, 2].map(k => Math.round(corners.reduce((s, c) => s + c[k], 0) / 4));
+const near = (i) => Math.max(Math.abs(d[i] - bg[0]), Math.abs(d[i + 1] - bg[1]), Math.abs(d[i + 2] - bg[2]));
+const TOL = 26;
+const seen = new Uint8Array(w * h);
+const stack = [];
+const push = (x, y) => { const p = y * w + x; if (!seen[p] && near(p * 4) <= TOL) { seen[p] = 1; stack.push(p); } };
+for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+while (stack.length) {
+  const p = stack.pop();
+  const x = p % w, y = (p / w) | 0;
+  if (x > 0) push(x - 1, y);
+  if (x < w - 1) push(x + 1, y);
+  if (y > 0) push(x, y - 1);
+  if (y < h - 1) push(x, y + 1);
+}
+let removed = 0;
+for (let p = 0; p < w * h; p++) if (seen[p]) { d[p * 4 + 3] = 0; removed++; }
+for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+  const p = y * w + x; if (seen[p]) continue;
+  const adj = (x > 0 && seen[p - 1]) || (x < w - 1 && seen[p + 1])
+    || (y > 0 && seen[p - w]) || (y < h - 1 && seen[p + w]);
+  if (adj && near(p * 4) <= 56) d[p * 4 + 3] = Math.min(d[p * 4 + 3], 110);
+}
+if (removed < w * h * 0.02 || removed > w * h * 0.95) { r._alphaFor = url; return; }
+ctx.putImageData(idata, 0, 0);
+r.walkAlpha = cv.toDataURL("image/png");
+r._alphaFor = url;
+refreshMarker(r);
+} catch (e) { r._alphaFor = url; }
+};
+img.onerror = () => { r._alphaBusy = false; r._alphaFor = url; };
+img.src = url;
 }
 /* お散歩モード用：透過の全身像が背景なしで地面に直接立っている表示。
  * 画像は住人ごとのスプライト（walkSrc）を使い、色違いは hue フィルタで付ける
@@ -301,11 +367,13 @@ ${sns? `<div class="psns">${sns}</div>`: ""}
 }
 
 function refreshMarker(r) {
+ensureTransparentWalk(r);
 if (r.marker) r.marker.setIcon(makeIcon(r));
 }
 residents.forEach(r => {
 r.marker = L.marker(r.pos, { icon: makeIcon(r)}).addTo(map);
 r.marker.bindPopup(() => profileHTML(r));
+ensureTransparentWalk(r);
 });
 
 /* ---- お散歩モードの歩行計算（メートル基準） ---- */
@@ -552,6 +620,7 @@ function attachMarker(state) {
 if (state.marker) return;
 state.marker = L.marker(state.pos, { icon: makeIcon(state)}).addTo(map);
 state.marker.bindPopup(() => profileHTML(state));
+ensureTransparentWalk(state);
 }
 
 function applyRemoteResidents(list) {
