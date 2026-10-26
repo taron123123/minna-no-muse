@@ -2,9 +2,11 @@
  * みんなのMuse — 撮影（地図の静止画・動画キャプチャ）
  * ============================================================
  * 地図（Leaflet コンテナ）を CDN の html-to-image で画像化する。
- *   静止画: toCanvas → PNG Blob
- *   動画  : 静止画フレームを短い間隔で合成キャンバスへ描き続け、
- *           canvas.captureStream + MediaRecorder で webm 化する
+ *   静止画: toCanvas → PNG Blob（解像度は表示の2倍以上・幅2048px上限）
+ *   動画  : 静止画フレームを約100ms間隔（端末負荷に応じて最大300msまで
+ *           自動で広げる）で合成キャンバス（幅は表示サイズ×DPR・上限1080px）
+ *           へ描き続け、canvas.captureStream(30) + MediaRecorder
+ *           （videoBitsPerSecond 6Mbps・mp4優先）で動画化する
  * OSM タイルは CORS ヘッダ（Access-Control-Allow-Origin: *）を返すため
  * canvas 汚染は起きない想定だが、外部アバター等で画像化に失敗した場合は
  * 例外を投げるので、呼び出し側で「撮影モードのまま端末のスクショ／画面収録を
@@ -75,16 +77,27 @@ function canvasToBlob(canvas, type) {
   });
 }
 
-/* 静止画キャプチャ: 地図の現在の表示を PNG Blob にする。失敗時は例外。 */
+/* 静止画キャプチャ: 地図の現在の表示を PNG Blob にする。失敗時は例外。
+ * 画質のため pixelRatio は表示の2倍以上（DPR・最大3）を狙うが、
+ * 出力幅が 2048px を超えないよう抑えてメモリ暴走を防ぐ。 */
 export async function captureMapPhoto(el) {
-  const canvas = await captureMapCanvas(el);
+  const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+  let pr = Math.min(3, Math.max(2, dpr));
+  const w = el && el.clientWidth;
+  if (w) pr = Math.min(pr, 2048 / w);
+  const canvas = await captureMapCanvas(el, Math.max(1, pr));
   return canvasToBlob(canvas, "image/png");
 }
 
 /**
- * 動画キャプチャ: 最大 maxSeconds 秒の webm を生成する。
- * フレームは frameMs 間隔で地図を再画像化して合成キャンバス（幅 width px）へ描く。
- * オプション: { maxSeconds=10, width=720, frameMs=300, onTick(残り秒数) }
+ * 動画キャプチャ: 最大 maxSeconds 秒の動画（mp4 優先・なければ webm）を生成する。
+ * フレームは frameMs 間隔を目安に地図を再画像化して合成キャンバスへ描く。
+ * 画像化に時間がかかる端末では、間隔を最大300msまで自動で広げて追いつかせる
+ * （その分だけ実効フレームレートが下がる。速い端末では約10fps）。
+ * 合成キャンバスの解像度は「表示サイズ × devicePixelRatio（最大2）」で、
+ * 幅は width px（既定1080）を上限にする。
+ * オプション: { maxSeconds=10, width=1080, frameMs=100,
+ *               bitsPerSecond=6000000, onTick(残り秒数) }
  * 戻り値: { done: Promise<Blob>, stop(): void }
  * 非対応環境（supportsVideoCapture() が false）では例外を投げる。
  */
@@ -93,15 +106,19 @@ export function recordMapVideo(el, opts = {}) {
     throw new Error("このブラウザは動画キャプチャに未対応です");
   }
   const maxSeconds = opts.maxSeconds ?? 10;
-  const width = opts.width ?? 720;
-  const frameMs = opts.frameMs ?? 300;
+  const frameMs = opts.frameMs ?? 100;
+  const bitsPerSecond = opts.bitsPerSecond ?? 6_000_000;
   const onTick = typeof opts.onTick === "function" ? opts.onTick : null;
 
-  const clientW = Math.max(1, el.clientWidth || width);
-  const clientH = Math.max(1, el.clientHeight || width);
-  const frameRatio = Math.min(2, width / clientW);
-  const W = Math.max(2, Math.round(clientW * frameRatio));
-  const H = Math.max(2, Math.round(clientH * frameRatio));
+  const clientW = Math.max(1, el.clientWidth || 720);
+  const clientH = Math.max(1, el.clientHeight || Math.round(clientW * 9 / 16));
+  const dpr = Math.min(2, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
+  const maxW = opts.width ?? 1080;
+  const frameRatio = Math.min(maxW, Math.round(clientW * dpr)) / clientW;
+  /* コーデックが好む偶数サイズに丸める */
+  const even = n => Math.max(2, Math.round(n / 2) * 2);
+  const W = even(clientW * frameRatio);
+  const H = even(clientH * frameRatio);
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -110,16 +127,20 @@ export function recordMapVideo(el, opts = {}) {
   ctx.fillStyle = "#fff9ee";
   ctx.fillRect(0, 0, W, H);
 
-  const stream = canvas.captureStream(10);
+  /* 合成キャンバスは最大30fpsで取り込み、描画されたフレームを滑らかに記録する */
+  const stream = canvas.captureStream(30);
+  /* SNS 互換性の高い mp4 を最優先し、なければ webm 系にフォールバックする */
   const mimeType = [
+    "video/mp4",
     "video/webm;codecs=vp9",
     "video/webm;codecs=vp8",
-    "video/webm",
-    "video/mp4"
+    "video/webm"
   ].find(m => {
     try { return window.MediaRecorder.isTypeSupported(m); } catch { return false; }
   });
-  const rec = new window.MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const recOptions = { videoBitsPerSecond: bitsPerSecond };
+  if (mimeType) recOptions.mimeType = mimeType;
+  const rec = new window.MediaRecorder(stream, recOptions);
   const chunks = [];
   rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
   const done = new Promise((resolve, reject) => {
@@ -128,32 +149,44 @@ export function recordMapVideo(el, opts = {}) {
   });
 
   let stopped = false;
-  let capturing = false;
+  let frameTimer = null;
+  let frameDelay = frameMs;
   const startedAt = Date.now();
 
+  /* 1フレーム描いて、かかった時間（ms）を返す */
   const drawFrame = async () => {
-    if (stopped || capturing) return;
-    capturing = true;
+    const t0 = Date.now();
     try {
       const frame = await captureMapCanvas(el, frameRatio);
       if (!stopped) ctx.drawImage(frame, 0, 0, W, H);
     } catch {
       /* フレームの画像化に失敗しても録画は続ける（前フレームを保持） */
     }
-    capturing = false;
+    return Date.now() - t0;
+  };
+
+  /* setInterval ではなく「描き終わってから次を予約」するチェーンにし、
+   * 画像化が遅い端末でも詰まらず、間隔だけが自動で広がるようにする */
+  const frameLoop = async () => {
+    if (stopped) return;
+    const dur = await drawFrame();
+    if (stopped) return;
+    if (dur > frameDelay) {
+      frameDelay = Math.min(300, Math.ceil(dur * 1.15));
+    }
+    frameTimer = setTimeout(frameLoop, Math.max(0, frameDelay - dur));
   };
 
   function stop() {
     if (stopped) return;
     stopped = true;
-    clearInterval(frameTimer);
+    if (frameTimer !== null) clearTimeout(frameTimer);
     clearInterval(tickTimer);
     try { rec.stop(); } catch { /* 既に停止している場合 */ }
   }
 
   rec.start(250);
-  drawFrame();
-  const frameTimer = setInterval(drawFrame, frameMs);
+  frameLoop();
   const tickTimer = setInterval(() => {
     const left = maxSeconds - (Date.now() - startedAt) / 1000;
     if (onTick) onTick(Math.max(0, Math.ceil(left)));
