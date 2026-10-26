@@ -230,7 +230,10 @@ function canvasBlob(canvas) {
 }
 
 /* 描画済み canvas を PNG 化し、共有ボタン群（Threads／保存／Web Share）を配線する共通処理。
- * btns: { threads, native, download } — いずれも省略可。
+ * btns: { threads, native, download, hint } — いずれも省略可。
+ * hint は案内文を出す要素（任意）: ファイル共有が使える環境では
+ * 「シェアする」からアプリへ画像ごと渡せる旨を、使えない環境では
+ * 「一度保存してからThreadsアプリで添付」を表示する。
  * ボタンの onclick を差し替えるので、対象を変えて何度呼んでもよい。
  * filename は保存時のファイル名。戻り値: { text, blob }（blob は生成できなかった場合 null）。 */
 async function wireShareButtons(canvas, text, filename, btns) {
@@ -263,10 +266,15 @@ async function wireShareButtons(canvas, text, filename, btns) {
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     };
   }
-  if (btns.native) {
-    const canShare = !!(file && typeof navigator !== "undefined"
+  let canShare = false;
+  try {
+    canShare = !!(file && typeof navigator !== "undefined"
       && typeof navigator.canShare === "function"
       && navigator.canShare({ files: [file] }));
+  } catch {
+    canShare = false;
+  }
+  if (btns.native) {
     btns.native.style.display = canShare ? "" : "none";
     btns.native.onclick = async () => {
       if (!canShare) return;
@@ -276,6 +284,12 @@ async function wireShareButtons(canvas, text, filename, btns) {
         /* ユーザーがキャンセルした場合などはそのまま */
       }
     };
+  }
+  if (btns.hint) {
+    btns.hint.style.display = "";
+    btns.hint.textContent = canShare
+      ? "「シェアする」からThreadsアプリを選ぶと、画像そのものを投稿できます。「Threadsでシェア」は文章だけの投稿です。"
+      : "このブラウザでは画像ファイルを直接シェアできません。「画像を保存」してから、Threadsアプリで画像を添付して投稿してください。";
   }
   return { text, blob };
 }

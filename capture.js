@@ -12,6 +12,11 @@
  *       ヘッダを返す）。タイル読み込みに失敗した場合は (B) に落ちる。
  *       この方式を使うには呼び出し側（app.js）が opts.getScene /
  *       opts.getResidents / opts.onLock / opts.onUnlock を渡すこと。
+ *       住人の位置は app.js 側で約120ms間隔に更新されるため、そのまま
+ *       描くと歩行が階段状にカクつく。レンダラは位置のサンプル履歴を
+ *       持ち、描画時刻を少し遅らせて時刻ベースで線形補間してから描く。
+ *       実際に使われた方式は opts.onMode("renderer" | "h2i") で呼び出し
+ *       側へ通知される（フォールバック時は「低速モード」と表示するため）。
  *   (B) html-to-image 方式（フォールバック）: 地図 DOM を約100ms間隔
  *       （端末負荷に応じて最大300msまで自動で広げる）で再画像化して
  *       合成キャンバスへ描き続ける従来方式。
@@ -43,6 +48,20 @@ export function supportsVideoCapture() {
     && typeof HTMLCanvasElement !== "undefined"
     && typeof HTMLCanvasElement.prototype.captureStream === "function"
     && typeof window.MediaRecorder === "function";
+}
+
+/* Web Share API でファイル自体を共有できるか（モバイルの共有シート経由で
+ * Threads アプリ等へ動画・画像ファイルを渡せるか）の判定。
+ * 使えない環境では「一度保存してからアプリで添付」を案内する。 */
+export function canShareFiles(files) {
+  try {
+    return typeof navigator !== "undefined"
+      && typeof navigator.canShare === "function"
+      && Array.isArray(files) && files.length > 0
+      && navigator.canShare({ files });
+  } catch {
+    return false;
+  }
 }
 
 /* ================= html-to-image の遅延ロード ================= */
@@ -286,20 +305,48 @@ export function computeTilePlacements(view) {
   return list;
 }
 
-const TILE_TIMEOUT_MS = 9000;
+const TILE_TIMEOUT_MS = 5000;   /* 1回の試行のタイムアウト */
+const TILE_MAX_ATTEMPTS = 3;     /* 1枚あたりの最大試行回数（リトライ込み） */
+const TILE_MAX_MISSING = 2;      /* この枚数までの欠けは許容して描画する */
 
-/* タイルをすべて読み込む。1枚でも失敗／タイムアウトしたら例外（→ フォールバック）。 */
-function loadTiles(view) {
-  const placements = computeTilePlacements(view);
-  if (!placements.length) return Promise.reject(new Error("タイル範囲が空です"));
-  return Promise.all(placements.map(p => new Promise((resolve, reject) => {
+function sleepMs(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+/* タイル1枚を1回だけ読み込む試行 */
+function loadTileOnce(p) {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     const timer = setTimeout(() => reject(new Error("タイル読み込みタイムアウト")), TILE_TIMEOUT_MS);
     img.onload = () => { clearTimeout(timer); resolve({ ...p, img }); };
     img.onerror = () => { clearTimeout(timer); reject(new Error("タイル読み込みに失敗しました")); };
     img.src = `https://tile.openstreetmap.org/${p.z}/${p.x}/${p.y}.png`;
-  })));
+  });
+}
+
+/* タイルをすべて読み込む。1枚ごとの失敗は間隔を空けてリトライし、
+ * 数枚の欠け（TILE_MAX_MISSING まで）は背景色のまま許容して正規ルートを
+ * 維持する。それ以上失敗したら例外（→ フォールバック＋低速モード表示）。 */
+export async function loadTiles(view) {
+  const placements = computeTilePlacements(view);
+  if (!placements.length) throw new Error("タイル範囲が空です");
+  const results = await Promise.all(placements.map(async p => {
+    for (let attempt = 0; attempt < TILE_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await loadTileOnce(p);
+      } catch {
+        if (attempt < TILE_MAX_ATTEMPTS - 1) await sleepMs(300 * (attempt + 1));
+      }
+    }
+    return null;
+  }));
+  const loaded = results.filter(Boolean);
+  const missing = placements.length - loaded.length;
+  if (missing > TILE_MAX_MISSING) {
+    throw new Error(`タイル読み込みに失敗しました（${missing}/${placements.length}枚）`);
+  }
+  return loaded;
 }
 
 /* 画像を CORS クリーンに読み込む（失敗しても例外にせず null を返す）。
@@ -327,6 +374,54 @@ function loadImageCORS(url, timeoutMs = 6000) {
   return p;
 }
 
+/* ================= 位置の時刻ベース補間 =================
+ * 住人の位置は app.js の徘徊タイマ（約120ms間隔）で更新されるため、
+ * 観測した位置をそのまま描くと歩行が120ms刻みの階段状になる。
+ * レンダラは住人ごとに位置サンプルの履歴を持ち、描画対象時刻を
+ * INTERP_DELAY_MS だけ過去にずらして、サンプル間を線形補間する。
+ * これで見た目の移動が連続になり、歩行のカクつきが消える。 */
+
+/* 補間のために描画を遅らせる量（サンプル間隔120ms＋観測ジッタの余裕） */
+export const INTERP_DELAY_MS = 160;
+
+/* samples: [{ t, lat, lng }]（t は時刻・昇順）を時刻 t で線形補間する。
+ * 範囲外は端のサンプルを返し、空なら null を返す。 */
+export function interpolateLatLng(samples, t) {
+  if (!samples || !samples.length) return null;
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (t <= first.t) return { lat: first.lat, lng: first.lng };
+  if (t >= last.t) return { lat: last.lat, lng: last.lng };
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = samples[i];
+    const b = samples[i + 1];
+    if (a.t <= t && t <= b.t) {
+      const f = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0;
+      return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
+    }
+  }
+  return { lat: last.lat, lng: last.lng };
+}
+
+/* サンプル履歴へ現在位置を積み、補間済み位置を返す。
+ * track は prep.tracks の slug ごとの配列。位置が変わったときだけ積む
+ * （止まっている住人はサンプルが増えず、補間結果も静止のままになる）。 */
+export function sampleResidentPosition(prep, r, now) {
+  let track = prep.tracks.get(r.slug);
+  if (!track) {
+    track = [];
+    prep.tracks.set(r.slug, track);
+  }
+  const last = track[track.length - 1];
+  if (!last || last.lat !== r.lat || last.lng !== r.lng) {
+    track.push({ t: now, lat: r.lat, lng: r.lng });
+  }
+  const rt = now - INTERP_DELAY_MS;
+  /* 補間に不要になった古いサンプルを捨てる（直前の1点は残す） */
+  while (track.length > 2 && track[1].t <= rt) track.shift();
+  return interpolateLatLng(track, rt) || { lat: r.lat, lng: r.lng };
+}
+
 /* レンダラの準備: ビュー固定＋タイル読み込み＋住人画像の先読み。
  * タイルが揃わなければ例外を投げる（呼び出し側で (B) にフォールバック）。 */
 async function prepareSceneRenderer(el, opts, scene) {
@@ -347,7 +442,7 @@ async function prepareSceneRenderer(el, opts, scene) {
   });
   const images = new Map();
   await Promise.all([...urls].map(async u => { images.set(u, await loadImageCORS(u)); }));
-  return { view, tiles, images, prevX: new Map(), face: new Map() };
+  return { view, tiles, images, prevX: new Map(), face: new Map(), tracks: new Map() };
 }
 
 /* ---- 描画部品（index.html の .muse-marker / .muse-walker の見た目に寄せる） ---- */
@@ -584,7 +679,9 @@ function drawScene(ctx, prep, opts, now) {
   const items = [];
   for (const r of residents) {
     if (typeof r.lat !== "number" || typeof r.lng !== "number") continue;
-    const [x, y] = projectToCssPx(view, r.lat, r.lng);
+    /* 120ms刻みの生位置ではなく、サンプル履歴から補間した位置を描く */
+    const pos = prep.tracks ? sampleResidentPosition(prep, r, now) : { lat: r.lat, lng: r.lng };
+    const [x, y] = projectToCssPx(view, pos.lat, pos.lng);
     if (x < -160 || y < -200 || x > view.width + 160 || y > view.height + 80) continue;
     /* 向きが渡ってこない場合は位置の変化量から推定する */
     if (typeof r.facing !== "number") {
@@ -664,16 +761,27 @@ function startRendererRecording(el, opts, prep) {
  *   opts.onLock()       -> 録画中の地図操作を無効化する（開始時に同期的に呼ぶ）
  *   opts.onUnlock()     -> 録画終了（成功・失敗・停止）時に必ず呼ぶ
  * タイル読み込みに失敗した場合や、コールバックが無い場合は従来の
- * html-to-image 方式（B）にフォールバックする。
+ * html-to-image 方式（B）にフォールバックする。その際は
+ * opts.onMode("h2i") で呼び出し側へ通知されるので、利用者へ
+ * 「低速モードで録画しました」と表示できる（無言で落とさない）。
+ * 正規ルートで録画が始まった場合は opts.onMode("renderer") が呼ばれる。
  * オプション: { maxSeconds=10, width=1080, bitsPerSecond=6000000,
- *               onTick(残り秒数), getScene, getResidents, onLock, onUnlock }
+ *               onTick(残り秒数), onMode(方式), getScene, getResidents,
+ *               onLock, onUnlock }
  * 戻り値: { done: Promise<Blob>, stop(): void }
  * 非対応環境（supportsVideoCapture() が false）では例外を投げる。
+ * この判定を通過しない限り (A)(B) どちらの録画も始まらないため、
+ * 未対応環境で中途半端に旧方式だけが動くことはない。
  */
 export function recordMapVideo(el, opts = {}) {
   if (!supportsVideoCapture()) {
     throw new Error("このブラウザは動画キャプチャに未対応です");
   }
+  const notifyMode = (mode) => {
+    if (typeof opts.onMode === "function") {
+      try { opts.onMode(mode); } catch { /* 通知失敗で録画は止めない */ }
+    }
+  };
   /* ビューは録画開始のこの瞬間に固定する（準備の非同期処理中に
    * ユーザーが地図を動かしても録画内容がずれないように） */
   let scene = null;
@@ -681,6 +789,7 @@ export function recordMapVideo(el, opts = {}) {
     try { scene = opts.getScene(); } catch { scene = null; }
   }
   if (!scene || typeof opts.getResidents !== "function") {
+    notifyMode("h2i");
     return recordMapVideoH2I(el, opts);
   }
   if (typeof opts.onLock === "function") {
@@ -699,6 +808,7 @@ export function recordMapVideo(el, opts = {}) {
         prep = null;
       }
       if (stopRequested) throw new Error("録画は開始前に停止されました");
+      notifyMode(prep ? "renderer" : "h2i");
       inner = prep
         ? startRendererRecording(el, opts, prep)
         : recordMapVideoH2I(el, opts);

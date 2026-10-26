@@ -1,6 +1,6 @@
 import { MinnaData} from "./data.js";
 import { drawResidentCard, buildShareText, threadsIntentUrl, residentNo, registrationDateFromSlug, presentResidentCard, presentPostCard } from "./card.js";
-import { supportsVideoCapture, captureMapPhoto, recordMapVideo, buildShotShareText } from "./capture.js";
+import { supportsVideoCapture, canShareFiles, captureMapPhoto, recordMapVideo, buildShotShareText } from "./capture.js";
 
 /* ================= 都道府県（代表点） ================= */
 const PREFS = {
@@ -775,7 +775,8 @@ badge: r.badge, noKey: r.slug, regDate: registrationDateFromSlug(r.slug), self: 
 }, {
 threads: document.getElementById("modalCardThreads"),
 native: document.getElementById("modalCardNative"),
-download: document.getElementById("modalCardDownload")
+download: document.getElementById("modalCardDownload"),
+hint: document.getElementById("cardShareHint")
 }).catch(err => console.warn("住民票カードの生成に失敗しました", err));
 }
 document.getElementById("cardModalClose").addEventListener("click", () => {
@@ -797,7 +798,8 @@ avatar: r.avatar, hue: r.hue
 }, {
 threads: document.getElementById("postCardThreads"),
 native: document.getElementById("postCardNative"),
-download: document.getElementById("postCardDownload")
+download: document.getElementById("postCardDownload"),
+hint: document.getElementById("postShareHint")
 }).catch(err => console.warn("つぶやきカードの生成に失敗しました", err));
 }
 document.getElementById("postModalClose").addEventListener("click", () => {
@@ -865,15 +867,25 @@ captureMsg.textContent = "画像化に失敗しました🙏 撮影モードの�
 
 /* 動画キャプチャ（最大10秒・残り秒数表示・途中停止可） */
 let activeRec = null;
+/* 直近の録画が低速モード（html-to-image フォールバック）だったかどうか。
+ * capture.js の onMode で更新され、結果モーダルの注記に使う。 */
+let lastShotSlow = false;
 shotVideoBtn.addEventListener("click", () => {
 if (activeRec) return;
 const recInfo = document.getElementById("recInfo");
 const recLeft = document.getElementById("recLeft");
 captureMsg.textContent = "";
+lastShotSlow = false;
 try {
 activeRec = recordMapVideo(mapEl, {
 maxSeconds: 10,
 onTick: (left) => { recLeft.textContent = left; },
+onMode: (mode) => {
+lastShotSlow = mode === "h2i";
+if (lastShotSlow) {
+captureMsg.textContent = "地図データを読み込めなかったため、低速モードで録画しています（動きが少しカクつきます）";
+}
+},
 /* 専用レンダラ方式（capture.js）への受け渡し:
  * getScene は録画開始時点のビューを1回だけ返し、録画中は固定される。
  * getResidents は毎フレーム呼ばれ、その瞬間の住人の状態を返す。
@@ -901,7 +913,7 @@ return;
 recInfo.style.display = "";
 shotVideoBtn.disabled = true;
 activeRec.done
-.then(blob => openShotResult(blob, "video"))
+.then(blob => { captureMsg.textContent = ""; openShotResult(blob, "video"); })
 .catch(err => {
 console.warn("動画の生成に失敗しました", err);
 captureMsg.textContent = "動画の生成に失敗しました🙏 端末の画面収録をお試しください。";
@@ -926,9 +938,13 @@ const img = document.getElementById("shotImg");
 const vid = document.getElementById("shotVideoPreview");
 const isVideo = kind === "video";
 document.getElementById("shotModalTitle").textContent = isVideo? "🎬 撮った動画": "📸 撮った写真";
-document.getElementById("shotModalNote").textContent = isVideo
+let shotNote = isVideo
 ? "Museたちのお散歩動画です。保存やシェアでSNSに投稿できます。"
 : "Museたちのお散歩写真です。保存やシェアでSNSに投稿できます。";
+if (isVideo && lastShotSlow) {
+shotNote += "⚠️ 地図データを読み込めなかったため、低速モードで録画しました（動きがカクつくことがあります）。";
+}
+document.getElementById("shotModalNote").textContent = shotNote;
 if (isVideo) {
 img.style.display = "none"; img.removeAttribute("src");
 vid.style.display = ""; vid.src = shotUrl;
@@ -950,10 +966,24 @@ a.click();
 a.remove();
 };
 const nativeBtn = document.getElementById("shotNative");
+const threadsBtn = document.getElementById("shotThreads");
+const shareHint = document.getElementById("shotShareHint");
 const file = new File([blob], isVideo? `minna-no-muse-movie.${ext}`: "minna-no-muse-photo.png",
 { type: blob.type || (isVideo? "video/webm": "image/png")});
-const canShare = typeof navigator.canShare === "function" && navigator.canShare({ files: [file] });
+/* ファイル自体を共有できる環境では、そちらを主導線にする。
+ * Threads の intent URL は文章しか渡せないため、ボタン名と注記で
+ * 「Threadsでシェア＝文章のみ」「シェア＝ファイルごと」を区別する。 */
+const canShare = canShareFiles([file]);
 nativeBtn.style.display = canShare? "": "none";
+nativeBtn.textContent = isVideo? "📤 動画をシェア": "📤 画像をシェア";
+nativeBtn.classList.toggle("blue", canShare);
+threadsBtn.classList.toggle("blue", !canShare);
+if (shareHint) {
+shareHint.style.display = "";
+shareHint.textContent = canShare
+? `「${nativeBtn.textContent}」からThreadsアプリを選ぶと、${isVideo? "動画": "画像"}そのものを投稿できます。「Threadsでシェア」は文章だけの投稿です。`
+: `このブラウザでは${isVideo? "動画": "画像"}ファイルを直接シェアできません。「保存する」で端末に保存してから、Threadsアプリで${isVideo? "動画": "画像"}を添付して投稿してください。`;
+}
 nativeBtn.onclick = async () => {
 if (!canShare) return;
 try { await navigator.share({ files: [file], text }); } catch { /* キャンセル時はそのまま */ }
