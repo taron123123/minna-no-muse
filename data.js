@@ -10,10 +10,12 @@
  *
  * Firestore のデータ形（db/COLLECTIONS.md）:
  *   muses : ドキュメントID = slug / {slug, name, avatar_url, prefecture, city, lat, lng,
- *           bio, sns_links[], badge, invite_code_hash, is_active, created_at}
+ *           bio, sns_links[], badge, is_active, created_at}
+ *           （本人確認情報は muses/{slug}/private/auth に分離。読み取り禁止）
  *   posts : 自動ID / {muse_slug, body, kind, created_at}
  * ブラウザ側は onSnapshot でリアルタイム購読する方針（db/REALTIME.md）。
- * 招待コード照合つきチェックイン投稿は REST 経由（db/checkin-rest-sample.js）。
+ * チェックイン投稿は REST 経由で、Firebase Auth の uid 照合つき
+ * （db/checkin-rest-sample.js）。
  */
 
 import { firebaseConfig } from "./firebase-config.js";
@@ -312,6 +314,7 @@ export const MinnaData = {
    * その Muse 本人が REST で行う（照合は db/firestore.rules）。 */
   createJoinCode(hash) { return FirestoreAdapter.createJoinCode(hash); }
 
-  /* ※ 投稿の書き込み（チェックイン）は REST 経由で code_hash 照合する
-   *   方針（db/checkin-rest-sample.js）。ブラウザからは書き込まない。 */
+  /* ※ 投稿の書き込み（チェックイン）は REST 経由で Firebase Auth の
+   *   uid 照合つきで行う方針（db/checkin-rest-sample.js）。
+   *   ブラウザからは書き込まない。 */
 };

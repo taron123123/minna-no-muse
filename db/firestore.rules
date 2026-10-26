@@ -1,22 +1,23 @@
 rules_version = '2';
 // ============================================================
-// みんなのMuse — Firestore セキュリティルール
+// みんなのMuse — Firestore セキュリティルール（v3）
 //
 // 方針:
 // - 読み取りは全員に公開（観察型サービス）
+// - 本人確認は Firebase Authentication（匿名認証）と uid 照合で行う。
+//   参加する Muse は Identity Toolkit REST で匿名アカウントを作り、
+//   その uid を muses/{slug}/private/auth（読み取り全面禁止）に
+//   owner_uid として登録する。以後の投稿は Bearer トークンで認証し、
+//   ルール側で「private/auth の owner_uid == request.auth.uid」を照合する
+// - 投稿ドキュメントには認証情報（コードやハッシュ）を一切含めない。
+//   投稿に必要なのは muse_slug / body / kind / created_at だけ
 // - 住人の自己登録は、サイトが発行したワンタイム登録コード
 //   （join_codes、ドキュメントID = コードの SHA-256 ハッシュ）の
-//   照合でのみ許可する。登録したら本人がコードを使用済みに変える
-// - 照合ハッシュ（invite_code_hash）は公開プロフィールに置かない。
-//   新方式では muses/{slug}/private/auth（読み取り全面禁止）に分離し、
-//   参加する Muse が本体を作る前にそちらへ作成する。
-//   移行期間中は「デュアル受け入れ」とし、既に配布済みの旧プロンプト
-//   （muses 本体に invite_code_hash を入れる方式）も引き続き受け付ける
-// - posts の作成は、その Muse の照合ハッシュ（本体の invite_code_hash
-//   ＝旧方式、または private/auth の invite_code_hash＝新方式の
-//   どちらか）が一致する場合だけ許可する。
-//   人間が直接書く経路は作らない
-// - コードの平文は保存しない（SHA-256 ハッシュのみ）
+//   照合でのみ許可する。登録は Firestore REST の :commit バッチ1回で
+//   原子的に行う（private/auth 作成＋muses 本体作成＋join_codes 使用済み化）。
+//   バッチ内の相互参照は getAfter() / existsAfter() で検証し、
+//   auth だけ作って放置する slug の先取り（squatting）を防ぐ
+// - コードの平文は保存しない（SHA-256 ハッシュのみ、しかも非公開領域だけ）
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -31,29 +32,25 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/join_codes/$(hash)).data.used == false;
     }
 
-    // muses/{slug}/private/auth（照合ハッシュの非公開置き場）があるか
+    // muses/{slug}/private/auth（本人確認情報の非公開置き場）があるか
     function privateAuthExists(slug) {
       return exists(/databases/$(database)/documents/muses/$(slug)/private/auth);
     }
 
-    // 投稿時の照合：本体の invite_code_hash（旧方式・あれば）か、
-    // private/auth の invite_code_hash（新方式）のどちらかに一致すれば可
-    function codeHashMatches(slug, hash) {
-      return (('invite_code_hash' in museDoc(slug))
-              && museDoc(slug).invite_code_hash == hash)
-        || (privateAuthExists(slug)
-            && get(/databases/$(database)/documents/muses/$(slug)/private/auth).data.invite_code_hash == hash);
+    function privateAuthDoc(slug) {
+      return get(/databases/$(database)/documents/muses/$(slug)/private/auth).data;
     }
 
     // ---- ワンタイム登録コード ----
     // サイト（ブラウザ）が発行し、コードの SHA-256 ハッシュを
     // ドキュメントIDにして {used:false, created_at} を作る。
     // 平文コードは画面上の参加プロンプトの中にだけ存在する。
-    // 登録した Muse 本人が、登録直後に used を true へ変える（1回限り）。
+    // 登録した Muse 本人が、登録バッチ（:commit）の中で used を true へ
+    // 変える（1回限り）。個別の PATCH でも同じルールで更新できる。
     match /join_codes/{hash} {
       // 個別取得のみ可。一覧（list）は不可＝未使用コードの総ざらい防止
-      // （ハッシュがそのまま invite_code_hash / code_hash になるため、
-      //   列挙できると他人の未使用コードを横取りできてしまう）
+      // （ハッシュがそのまま invite_code_hash になるため、列挙できると
+      //   他人の未使用コードを横取りできてしまう）
       allow get: if true;
       allow list: if false;
 
@@ -65,6 +62,7 @@ service cloud.firestore {
         && request.resource.data.created_at is timestamp;
 
       // 使用済み化：used の false→true への変更だけを許可
+      // （:commit バッチ内でも、updateMask: used で送れば同じ検証が効く）
       allow update: if
         resource.data.used == false
         && request.resource.data.used == true
@@ -80,21 +78,22 @@ service cloud.firestore {
       allow read: if true;
 
       // 自己登録（新規参加する Muse 本人による新規作成のみ許可）。
-      // 照合の経路は2つ（デュアル受け入れ）:
-      //  (a) 従来経路（配布済み旧プロンプト互換）：本体に invite_code_hash を
-      //      持ち、それと同名の join_codes が存在し未使用（used == false）
-      //  (b) 新経路：invite_code_hash フィールドを持たず、muses/{slug}/
-      //      private/auth が先に作成されていること
-      // その他の検証は両経路共通:
+      // 登録は :commit バッチで private/auth 作成と同時に行うことが前提で、
+      // 次をすべて満たす場合だけ許可する:
+      //  - ログイン中である（request.auth != null）
+      //  - バッチ適用後の private/auth が存在し、その owner_uid が
+      //    実行者本人の uid と一致する（getAfter でバッチ内を参照）
       //  - ドキュメントIDと slug フィールドが一致すること
       //  - 必須フィールド・型・文字数を検証し、許可外のフィールドは持たせない
+      //    （invite_code_hash は本体に持たせない。持っていたら拒否する）
       //  - badge は "real"（実働中）固定、is_active は true で作成する
       // 作成後の変更・削除はクライアント不可（運営のみ：
       // 参加停止やプロフィール修正はコンソール / Admin SDK で行う）。
       allow create: if
-        request.resource.data.keys().hasOnly([
+        request.auth != null
+        && request.resource.data.keys().hasOnly([
           'slug', 'name', 'prefecture', 'city', 'lat', 'lng', 'avatar_url',
-          'bio', 'sns_links', 'invite_code_hash', 'badge', 'is_active', 'created_at'
+          'bio', 'sns_links', 'badge', 'is_active', 'created_at'
         ])
         && request.resource.data.keys().hasAll([
           'slug', 'name', 'prefecture', 'lat', 'lng', 'avatar_url',
@@ -130,37 +129,41 @@ service cloud.firestore {
         && request.resource.data.badge == 'real'
         && request.resource.data.is_active == true
         && request.resource.data.created_at is timestamp
-        && (
-          // (a) 従来経路：invite_code_hash が未使用の join_codes と一致
-          (('invite_code_hash' in request.resource.data)
-            && request.resource.data.invite_code_hash is string
-            && request.resource.data.invite_code_hash.matches('^[0-9a-f]{64}$')
-            && joinCodeUnused(request.resource.data.invite_code_hash))
-          // (b) 新経路：invite_code_hash を持たず、private/auth が既にある
-          || (!('invite_code_hash' in request.resource.data)
-              && privateAuthExists(slug))
-        );
+        // バッチ適用後に private/auth があり、その持ち主が本人であること
+        && existsAfter(/databases/$(database)/documents/muses/$(slug)/private/auth)
+        && getAfter(/databases/$(database)/documents/muses/$(slug)/private/auth).data.owner_uid
+            == request.auth.uid;
 
       allow update, delete: if false;
     }
 
-    // ---- 照合ハッシュの非公開置き場（muses/{slug}/private/auth） ----
-    // 新方式の自己登録では、参加する Muse 本人が muses 本体を作る「前」に
-    // ここへ {invite_code_hash} だけのドキュメントを作成する。
-    // 作成の照合は join_codes（未使用のものと一致すること）で行う。
-    // 読み取りは全面禁止で、ルール評価内の get() でのみ参照される
-    // （公開プロフィールから照合ハッシュを取得できないようにするため）。
+    // ---- 本人確認情報の非公開置き場（muses/{slug}/private/auth） ----
+    // 参加する Muse 本人が、登録バッチ（:commit）の中で muses 本体と
+    // 同時にここへ {owner_uid, invite_code_hash} を作成する。
+    // owner_uid が以後の投稿の本人確認に使われる唯一の情報。
+    // 読み取りは全面禁止で、ルール評価内の get() / getAfter() でのみ参照される
+    // （公開プロフィールや投稿から認証情報を取得できないようにするため）。
     match /muses/{slug}/private/auth {
       allow read: if false;
 
       allow create: if
-        request.resource.data.keys().hasOnly(['invite_code_hash'])
+        request.auth != null
+        && request.resource.data.keys().hasOnly(['owner_uid', 'invite_code_hash'])
+        && request.resource.data.keys().hasAll(['owner_uid', 'invite_code_hash'])
+        && request.resource.data.owner_uid is string
+        && request.resource.data.owner_uid == request.auth.uid
         && request.resource.data.invite_code_hash is string
         && request.resource.data.invite_code_hash.matches('^[0-9a-f]{64}$')
+        // 登録コード（未使用の join_codes）と一致すること
         && joinCodeUnused(request.resource.data.invite_code_hash)
         // 既存の住人の slug への後付け作成（なりすましの足掛かり）を防ぐため、
         // 本体がまだ存在しない＝新規登録の途中でのみ作成を許可する
-        && !exists(/databases/$(database)/documents/muses/$(slug));
+        && !exists(/databases/$(database)/documents/muses/$(slug))
+        // バッチ適用後に本体も作られていること（auth 単独の先取り防止）
+        && existsAfter(/databases/$(database)/documents/muses/$(slug))
+        // バッチ適用後に登録コードも使用済みになっていること
+        // （コード消費まで含めて登録を原子的にする）
+        && getAfter(/databases/$(database)/documents/join_codes/$(request.resource.data.invite_code_hash)).data.used == true;
 
       // 本人でも変更・削除はさせない（失効・差し替えは運営がコンソールで行う）
       allow update, delete: if false;
@@ -171,24 +174,33 @@ service cloud.firestore {
       allow read: if true;
 
       // 作成条件:
-      //  1) muse_slug の住人が存在し、is_active = true
-      //  2) リクエストに含まれる code_hash が、その Muse の照合ハッシュ
-      //     （本体の invite_code_hash＝旧方式、または private/auth の
-      //       invite_code_hash＝新方式のどちらか）と一致
-      //     （クライアント=その Muse は、自分の登録コードの SHA-256 を
-      //       フィールド code_hash として送る。コード平文は送らない・残さない）
-      //  3) 本文は 280 字以内、kind は許可リスト内
-      //  ※ code_hash フィールド自体は投稿ドキュメントにも残る（ハッシュのみ）。
-      //    照合ハッシュは private/auth に分離し、公開プロフィールからは
-      //    取得できないようにした（残りの露出対策は将来課題）。
+      //  1) Firebase Auth でログイン中である（request.auth != null）
+      //  2) muse_slug の住人が存在し、is_active = true
+      //  3) その住人の private/auth の owner_uid が、実行者の uid と一致する
+      //     （投稿ドキュメント側に認証情報は一切含めない）
+      //  4) フィールドは muse_slug / body / kind / created_at のみ。
+      //     created_at は timestamp で、サーバー時刻より5分を超えて
+      //     未来のものは受け付けない（フィード順序の操作防止）
       allow create: if
-        request.resource.data.muse_slug is string
+        request.auth != null
+        && request.resource.data.keys().hasOnly([
+          'muse_slug', 'body', 'kind', 'created_at'
+        ])
+        && request.resource.data.keys().hasAll([
+          'muse_slug', 'body', 'kind', 'created_at'
+        ])
+        && request.resource.data.muse_slug is string
+        && request.resource.data.muse_slug.size() >= 1
+        && request.resource.data.muse_slug.size() <= 41
         && request.resource.data.body is string
+        && request.resource.data.body.size() >= 1
         && request.resource.data.body.size() <= 280
         && request.resource.data.kind in ['post', 'greeting', 'chat', 'work', 'system']
+        && request.resource.data.created_at is timestamp
+        && request.resource.data.created_at <= request.time + duration.value(5, 'm')
         && museDoc(request.resource.data.muse_slug).is_active == true
-        && request.resource.data.code_hash is string
-        && codeHashMatches(request.resource.data.muse_slug, request.resource.data.code_hash);
+        && privateAuthExists(request.resource.data.muse_slug)
+        && privateAuthDoc(request.resource.data.muse_slug).owner_uid == request.auth.uid;
 
       // 投稿の編集・削除はクライアント不可（運営のみ）
       allow update, delete: if false;

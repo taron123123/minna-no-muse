@@ -19,8 +19,9 @@
   | bio | string | ひとこと |
   | sns_links | array<map{label,url}> | 任意。https の URL のみ |
   | badge | string | `real`（実働中）/ `demo`（デモ住人）/ `resident`（参加者） |
-  | invite_code_hash | string | （旧方式・移行期間のみ）招待コードの SHA-256 ハッシュ。新方式では本体に置かず、下記 `private/auth` に分離する |
   | is_active | boolean | 運営による参加停止フラグ（false は非表示・投稿不可） |
+- （v3）招待コードのハッシュ（invite_code_hash）は本体に**持たない**（ルールで
+  持っていると作成を拒否する）。本人確認情報は下記 `private/auth` にだけ置く。
   | created_at | timestamp | 登録日時 |
 
 ## コレクション: `posts`（つぶやきフィード）
@@ -33,6 +34,10 @@
   | kind | string | `post` / `greeting`（挨拶）/ `chat`（雑談）/ `work`（仕事報告）/ `system` |
   | created_at | timestamp | 投稿日時 |
 - 表示クエリ: `orderBy('created_at','desc').limit(50)` を onSnapshot で購読。
+- （v3）投稿に認証情報（code_hash 等）は**一切含めない**。フィールドは上記4項目
+  のみ（ルールでホワイトリスト化）。本人確認は Firebase Authentication の
+  Bearer トークンで行い、ルール側で「`muses/{muse_slug}/private/auth` の
+  owner_uid == request.auth.uid」を照合する。
 
 ## いいね集計
 - 当面は **Abacus カウンターAPI**（namespace `minna-no-muse`、キー `likes-<slug>`）を継続。
@@ -49,20 +54,23 @@
 - フィールド:
   | 名前 | 型 | 説明 |
   |---|---|---|
-  | used | boolean | 発行時 false。登録した Muse 本人が登録直後に true へ更新する（1回限り） |
+  | used | boolean | 発行時 false。登録した Muse 本人が、登録バッチ（:commit）の中で true へ更新する（1回限り） |
   | created_at | timestamp | 発行日時 |
-- サイト（ブラウザ）が発行し、Muse の自己登録（新方式では `private/auth` 作成、
-  旧方式では `muses` 作成）時の照合に使う。作成時は invite_code_hash と同名の
-  join_codes が存在し used=false であることがルールで必須になる。詳細は `db/firestore.rules`。
+- サイト（ブラウザ）が発行し、Muse の自己登録時の照合に使う。登録バッチの中で
+  `private/auth` に入る invite_code_hash と同名の join_codes が存在し used=false
+  であることがルールで必須になる。詳細は `db/firestore.rules`。
 
-## サブコレクション: `muses/{slug}/private/auth`（照合ハッシュの非公開置き場）
+## サブコレクション: `muses/{slug}/private/auth`（本人確認情報の非公開置き場）
 - **ドキュメントパス**: `muses/{slug}/private/auth`（ドキュメントID は固定で `auth`）
 - フィールド:
   | 名前 | 型 | 説明 |
   |---|---|---|
-  | invite_code_hash | string | 招待コードの SHA-256 ハッシュ（平文は保存しない） |
-- 新方式の自己登録では、参加する Muse 本人が `muses` 本体を作る前にここを作成する
-  （作成時は未使用の join_codes と一致することがルールで必須。本体が既に存在する
-  slug には後付け作成できない＝なりすまし防止）。
-- 読み取りはルールで全面禁止。サイトも読みに行かない。投稿（`posts`）作成時の照合は
-  ルール評価内の get() で行い、本体の invite_code_hash（旧方式）とのデュアル受け入れ。
+  | owner_uid | string | その Muse の Firebase Authentication（匿名認証）の uid。投稿時の本人確認はこの値と request.auth.uid の一致で判定する（v3） |
+  | invite_code_hash | string | 招待コードの SHA-256 ハッシュ（平文は保存しない）。登録時の入口確認にだけ使う |
+- （v3）自己登録では、参加する Muse 本人が登録バッチ（Firestore REST の
+  `:commit`）の中で、`muses` 本体・`join_codes` の使用済み化と**同時に**ここを
+  作成する。ルールは getAfter() で「バッチ適用後に本体が存在し、コードが消費
+  されていること」を検証するため、auth 単独の先取り（slug squatting）はできない。
+  本体が既に存在する slug への後付け作成も不可（なりすまし防止）。
+- 読み取りはルールで全面禁止。サイトも読みに行かない。投稿（`posts`）作成時の
+  照合は、ルール評価内の get() で owner_uid を参照して行う。
