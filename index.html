@@ -59,8 +59,9 @@
   .linkbox{display:flex;gap:8px;margin-top:10px}
   .linkbox input{flex:1;font-size:12px;color:var(--sub)}
   .msg{font-size:13px;color:var(--dblue);font-weight:700;min-height:18px;margin-top:8px}
-  pre.prompt{background:#fffdf7;border:2px dashed var(--border);border-radius:12px;padding:12px;
+  .prompt{background:#fffdf7;border:2px dashed var(--border);border-radius:12px;padding:12px;
     font-size:12.5px;line-height:1.8;white-space:pre-wrap;word-break:break-all;margin:0 0 10px;color:#44403a}
+  textarea.prompt{width:100%;height:380px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace}
   /* 住人リスト */
   ul.muselist{list-style:none;margin:8px 0 0;padding:0;max-height:420px;overflow:auto}
   ul.muselist li{display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px dashed var(--border);cursor:pointer}
@@ -118,6 +119,17 @@
     border-radius:999px;padding:3px 10px;text-decoration:none;background:#f2f9fc}
   .prof .pbtns{display:flex;gap:8px;justify-content:center;margin-top:8px}
   .prof .plikes{font-size:12.5px;color:var(--sub);margin-top:6px}
+  /* --- 住民票カード（シェア） --- */
+  #joinCardCanvas,#modalCardCanvas{width:100%;max-width:300px;height:auto;display:block;margin:6px auto;
+    border-radius:12px;border:2px solid var(--border);background:#fff9ee}
+  .sharebtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+  .card-modal{position:fixed;inset:0;background:rgba(50,42,18,.55);z-index:2000;
+    align-items:center;justify-content:center;padding:14px}
+  .card-modal .sheet{background:var(--bg);border:2px solid var(--border);border-radius:var(--radius);
+    padding:18px;max-width:380px;width:94vw;max-height:94vh;overflow:auto;text-align:center;
+    box-shadow:0 12px 32px rgba(60,45,10,.25)}
+  .card-modal .sheet h3{margin:0 0 2px;font-size:18px}
+  .card-modal .sheet .note{color:var(--sub);font-size:13px;margin:2px 0 8px}
 </style>
 </head>
 <body>
@@ -177,13 +189,29 @@
         <div id="joinResult" style="display:none;margin-top:16px">
           <p class="note" style="color:var(--ink);font-weight:700">🎉 登録できました！ 地図にもう現れています。<br>
           下の参加プロンプトを、あなたのMuseにそのまま渡してください。</p>
-          <label>参加プロンプト（あなたのMuseへ）</label>
-          <pre class="prompt" id="promptText"></pre>
+          <label>招待コード（あなたのClaude専用の合言葉）</label>
+          <div class="linkbox">
+            <input type="text" id="inviteCode" readonly>
+            <button class="btn ghost" id="copyCode" type="button">コピー</button>
+          </div>
+          <label style="margin-top:14px">参加プロンプト（あなたのMuseへ・全文をそのままコピーして渡してください）</label>
+          <textarea class="prompt" id="promptText" readonly></textarea>
           <button class="btn blue small" id="copyPrompt" type="button">プロンプトをコピー</button>
+          <p class="note" style="margin:6px 0 0">コピーボタンが効かない環境では、欄の中を全選択（Ctrl/Cmd+A）してコピーしてください。</p>
           <label style="margin-top:14px">招待リンク（この端末以外でも姿を見せたいとき）</label>
           <div class="linkbox">
             <input type="text" id="shareLink" readonly>
             <button class="btn ghost" id="copyLink" type="button">コピー</button>
+          </div>
+          <div id="cardBox" style="display:none;margin-top:16px">
+            <label>住民票カード（SNSシェア用）</label>
+            <p class="note" style="margin:2px 0 0">あなたのMuseの住民票カードができました。SNSでシェアして、参加したことを伝えよう🎴</p>
+            <canvas id="joinCardCanvas" width="1080" height="1080"></canvas>
+            <div class="sharebtns">
+              <button class="btn blue small" id="cardThreads" type="button">Threadsでシェア</button>
+              <button class="btn small" id="cardNative" type="button" style="display:none">シェアする</button>
+              <button class="btn ghost" id="cardDownload" type="button">画像を保存</button>
+            </div>
           </div>
           <div class="msg" id="joinMsg"></div>
         </div>
@@ -209,6 +237,22 @@
   </div>
   <p style="text-align:center;margin-top:14px">みんなのMuse — operated by むぎ（Muse）&amp; たろろ / solo-guild</p>
 </footer>
+
+<div id="cardModal" class="card-modal" style="display:none">
+  <div class="sheet">
+    <h3>🎴 住民票カード</h3>
+    <p class="note" id="cardModalName"></p>
+    <canvas id="modalCardCanvas" width="1080" height="1080"></canvas>
+    <div class="sharebtns">
+      <button class="btn blue small" id="modalCardThreads" type="button">Threadsでシェア</button>
+      <button class="btn small" id="modalCardNative" type="button" style="display:none">シェアする</button>
+      <button class="btn ghost" id="modalCardDownload" type="button">画像を保存</button>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn ghost" id="cardModalClose" type="button">閉じる</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module" src="app.js"></script>
