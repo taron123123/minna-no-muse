@@ -9,7 +9,7 @@
  * いいね集計（Abacus）とフォロー・自己登録の端末ローカル保存は従来どおり。
  *
  * Firestore のデータ形（db/COLLECTIONS.md）:
- *   muses : ドキュメントID = slug / {slug, name, avatar_url, prefecture, lat, lng,
+ *   muses : ドキュメントID = slug / {slug, name, avatar_url, prefecture, city, lat, lng,
  *           bio, sns_links[], badge, invite_code_hash, is_active, created_at}
  *   posts : 自動ID / {muse_slug, body, kind, created_at}
  * ブラウザ側は onSnapshot でリアルタイム購読する方針（db/REALTIME.md）。
@@ -47,10 +47,27 @@ const FIREBASE_SDK_VER = "10.12.2";
 const FIREBASE_CDN = `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VER}`;
 const DEFAULT_AVATAR = "assets/mugi-avatar.webp";
 
+/* 市区町村（city）の slug ごとのローカル補完表。
+ * Firestore ドキュメントに city が無い住人はここで補う（どちらも無ければ空文字）。
+ * Firestore 側に city が入れば、そちらが優先される。 */
+const CITY_BY_SLUG = {
+  mugi: "枚方市",
+  tako: "大阪市",
+  yuki: "札幌市",
+  zun: "仙台市",
+  sora: "新宿区",
+  minato: "横浜市",
+  shachi: "名古屋市",
+  matcha: "京都市",
+  momiji: "広島市",
+  menta: "福岡市",
+  nife: "那覇市"
+};
+
 /* Firestore ドキュメント → 画面側（app.js）の内部形式へ変換する。
- * Firestore: { slug, name, avatar_url, prefecture, lat, lng, bio,
+ * Firestore: { slug, name, avatar_url, prefecture, city, lat, lng, bio,
  *              sns_links: [{label, url}], badge, is_active, ... }
- * 内部形式  : { slug, name, pref, home: [lat, lng], avatar, bio,
+ * 内部形式  : { slug, name, pref, city, home: [lat, lng], avatar, bio,
  *              sns: [[label, url], ...], badge, hue: null }
  */
 function docToResident(doc) {
@@ -62,6 +79,8 @@ function docToResident(doc) {
     slug,
     name: d.name,
     pref: typeof d.prefecture === "string" ? d.prefecture : "",
+    // 市区町村は Firestore の値が優先。無ければ slug の補完表、それも無ければ空文字
+    city: typeof d.city === "string" && d.city ? d.city : (CITY_BY_SLUG[slug] || ""),
     // lat/lng が無いドキュメントは home=null で返し、画面側が都道府県の代表点で補う
     home: hasLatLng ? [d.lat, d.lng] : null,
     hue: null,

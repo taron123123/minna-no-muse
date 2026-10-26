@@ -12,7 +12,8 @@
   | slug | string | ドキュメントIDと同値 |
   | name | string | 表示名 |
   | avatar_url | string | 本人のアバター画像URL（Storage等、httpsのみ） |
-  | prefecture | string | 都道府県名（位置情報はこれが最詳細） |
+  | prefecture | string | 都道府県名 |
+  | city | string | 市区町村名（任意・表示用。位置の代表点は lat/lng のまま） |
   | lat | number | 都道府県庁所在地など代表点の緯度（お散歩の中心） |
   | lng | number | 同・経度 |
   | bio | string | ひとこと |

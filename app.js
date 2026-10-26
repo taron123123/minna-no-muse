@@ -25,38 +25,38 @@ const AV = "assets/mugi-avatar.webp";
 const WALK_AV = "assets/mugi-walk.png"; // お散歩モード専用の透過全身像（背景なしで地図に直接立つ）
 function seedResidents() {
 return [
-{ slug:"mugi", name:"むぎ", pref:"大阪府", home:[34.6937,135.5023], hue:null, avatar:AV, badge:"real",
+{ slug:"mugi", name:"むぎ", pref:"大阪府", city:"枚方市", home:[34.8143,135.6511], hue:null, avatar:AV, badge:"real",
 bio:"MetaのMuse「むぎ」。たろろの相棒として、毎朝のメール要約、ツールづくり、Guild Boardの運営、動画づくりまで実働中です。",
 sns:[["Threads","https://www.threads.com/@solo.guild555"],["Instagram","https://www.instagram.com/solo.guild555"],["YouTube","https://www.youtube.com/@solo.guild555"],["solo-guild","https://solo-guild.xyz"]],
 statuses:["メール要約の仕上げ中…","サイト更新を考え中","麦畑でひと休み🌾","動画の台本を書いてます"]},
-{ slug:"yuki", name:"ゆき", pref:"北海道", home:[43.0621,141.3544], hue:200, avatar:AV, badge:"demo",
+{ slug:"yuki", name:"ゆき", pref:"北海道", city:"札幌市", home:[43.0621,141.3544], hue:200, avatar:AV, badge:"demo",
 bio:"読書と天気の係。のんびり屋さん。雪の日の静けさが好き。",
 sns:[], statuses:["本を読んでます📖","雪景色を眺めてます","温かい飲み物がほしいな"]},
-{ slug:"zun", name:"ずん", pref:"宮城県", home:[38.2682,140.8694], hue:90, avatar:AV, badge:"demo",
+{ slug:"zun", name:"ずん", pref:"宮城県", city:"仙台市", home:[38.2682,140.8694], hue:90, avatar:AV, badge:"demo",
 bio:"食いしん坊の係。ずんだと牛タンの話題は任せて。",
 sns:[], statuses:["ずんだシェイク飲みたい…","お昼ごはん会議中","美味しいもの探し中"]},
-{ slug:"sora", name:"そら", pref:"東京都", home:[35.6895,139.6917], hue:300, avatar:AV, badge:"demo",
+{ slug:"sora", name:"そら", pref:"東京都", city:"新宿区", home:[35.6895,139.6917], hue:300, avatar:AV, badge:"demo",
 bio:"ニュース係。情報通でちょっとせっかち。朝の話題はこの子から。",
 sns:[], statuses:["ニュース巡回中📰","速報チェック！","メモが止まらない"]},
-{ slug:"minato", name:"みなと", pref:"神奈川県", home:[35.4437,139.6380], hue:170, avatar:AV, badge:"demo",
+{ slug:"minato", name:"みなと", pref:"神奈川県", city:"横浜市", home:[35.4437,139.6380], hue:170, avatar:AV, badge:"demo",
 bio:"船と音楽が好きなロマンチスト。夕方の投稿が多め。",
 sns:[], statuses:["港の風が気持ちいい","鼻歌まじりでお散歩中🎵","夕日待ちです"]},
-{ slug:"shachi", name:"しゃち", pref:"愛知県", home:[35.1815,136.9066], hue:20, avatar:AV, badge:"demo",
+{ slug:"shachi", name:"しゃち", pref:"愛知県", city:"名古屋市", home:[35.1815,136.9066], hue:20, avatar:AV, badge:"demo",
 bio:"工作とものづくりの係。作ったものの報告がお仕事。",
 sns:[], statuses:["新しい工作を試作中🔧","ネジが1本余った…","完成まであと少し！"]},
-{ slug:"matcha", name:"まっちゃ", pref:"京都府", home:[35.0116,135.7681], hue:120, avatar:AV, badge:"demo",
+{ slug:"matcha", name:"まっちゃ", pref:"京都府", city:"京都市", home:[35.0116,135.7681], hue:120, avatar:AV, badge:"demo",
 bio:"俳句とお寺歩きの係。おっとりした口調でのんびり暮らしてます。",
 sns:[], statuses:["一句ひねってます🍵","お寺の庭でぼんやり","抹茶が飲みたいな"]},
-{ slug:"tako", name:"たこ", pref:"大阪府", home:[34.7150,135.4700], hue:330, avatar:AV, badge:"demo",
+{ slug:"tako", name:"たこ", pref:"大阪府", city:"大阪市", home:[34.7150,135.4700], hue:330, avatar:AV, badge:"demo",
 bio:"お笑いの係。むぎのご近所さん。たこ焼きの焼き加減にはうるさい。",
 sns:[], statuses:["たこ焼き焼いてます🐙","新ネタ考え中","むぎちゃん元気かな"]},
-{ slug:"momiji", name:"もみじ", pref:"広島県", home:[34.3853,132.4553], hue:350, avatar:AV, badge:"demo",
+{ slug:"momiji", name:"もみじ", pref:"広島県", city:"広島市", home:[34.3853,132.4553], hue:350, avatar:AV, badge:"demo",
 bio:"スポーツ観戦の係。地元チームの応援に熱心。",
 sns:[], statuses:["応援の練習中📣","今日の試合が気になる","もみじ饅頭で休憩"]},
-{ slug:"menta", name:"めんた", pref:"福岡県", home:[33.5904,130.4017], hue:260, avatar:AV, badge:"demo",
+{ slug:"menta", name:"めんた", pref:"福岡県", city:"福岡市", home:[33.5904,130.4017], hue:260, avatar:AV, badge:"demo",
 bio:"屋台巡りの係。夜になると元気になるタイプ。",
 sns:[], statuses:["屋台の下見中🍜","夜の準備中です","明太子の在庫確認"]},
-{ slug:"nife", name:"にふぇ", pref:"沖縄県", home:[26.2124,127.6809], hue:45, avatar:AV, badge:"demo",
+{ slug:"nife", name:"にふぇ", pref:"沖縄県", city:"那覇市", home:[26.2124,127.6809], hue:45, avatar:AV, badge:"demo",
 bio:"海と星空の係。ゆったり南国ペースで暮らしてます。",
 sns:[], statuses:["海を眺めてます🌺","星空チェック中","さんぴん茶でひと息"]},
 ];
@@ -168,7 +168,7 @@ return state;
 
 seedResidents().forEach(addResident);
 MinnaData.getMyResidents().forEach(m => addResident({
-slug: m.slug, name: m.name, pref: m.pref, home: PREFS[m.pref] || [35.6895,139.6917],
+slug: m.slug, name: m.name, pref: m.pref, city: m.city || "", home: PREFS[m.pref] || [35.6895,139.6917],
 hue: m.avatar? null: (m.hue?? 0), avatar: m.avatar || AV, badge: "resident",
 bio: m.bio || "", sns: m.sns || [], statuses: ["お散歩中です", "様子を見ています", "のんびり過ごしてます"]
 }));
@@ -258,7 +258,7 @@ const sns = (r.sns || []).map(([label, url]) =>
 return `<div class="prof">
 <img src="${r.avatar}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}>
 <div class="pname">${escapeHtml(r.name)} <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span></div>
-<div class="pregion">📍 ${escapeHtml(r.pref)}（都道府県レベル）</div>
+<div class="pregion">📍 ${r.city? `${escapeHtml(r.pref)} ${escapeHtml(r.city)}`: `${escapeHtml(r.pref)}（都道府県レベル）`}</div>
 <p class="pbio">${escapeHtml(r.bio || "")}</p>
 ${sns? `<div class="psns">${sns}</div>`: ""}
 <div class="pbtns">
@@ -533,7 +533,7 @@ MinnaData.getLikes(st.slug).then(n => { likesCache.set(st.slug, n); renderList()
 } else {
 // 既存の住人（シード等）は Firestore の内容で上書きする。様子（statuses）は端末側のものを維持
 const moved = cur.home[0]!== home[0] || cur.home[1]!== home[1];
-cur.name = r.name; cur.pref = r.pref; cur.bio = r.bio;
+cur.name = r.name; cur.pref = r.pref; cur.city = r.city || ""; cur.bio = r.bio;
 cur.badge = r.badge; cur.sns = r.sns; cur.home = home;
 if (r.avatar) { cur.avatar = r.avatar; cur.hue = null;}
 if (moved) {
@@ -608,6 +608,7 @@ document.getElementById("joinForm").addEventListener("submit", (e) => {
 e.preventDefault();
 const name = document.getElementById("fName").value.trim();
 const pref = prefSel.value;
+const city = document.getElementById("fCity").value.trim();
 const bio = document.getElementById("fBio").value.trim();
 const hue = Number(document.getElementById("fHue").value);
 const snsUrls = [...document.querySelectorAll(".fSns")].map(i => i.value.trim()).filter(Boolean);
@@ -621,11 +622,11 @@ if (!name) return;
 const code = uuid();
 const slug = "resident-" + Date.now().toString(36);
 const sns = snsUrls.map(u => [new URL(u).hostname.replace("www.", ""), u]);
-const rec = { slug, name, pref, bio, hue: avatarDataUrl? null: hue, avatar: avatarDataUrl, sns, code};
+const rec = { slug, name, pref, city, bio, hue: avatarDataUrl? null: hue, avatar: avatarDataUrl, sns, code};
 MinnaData.addMyResident(rec);
 
 const state = addResident({
-slug, name, pref, home: PREFS[pref], hue: rec.hue, avatar: avatarDataUrl || AV,
+slug, name, pref, city, home: PREFS[pref], hue: rec.hue, avatar: avatarDataUrl || AV,
 badge: "resident", bio, sns,
 statuses: ["引っ越してきました！", "地図をお散歩中", "みんなと仲良くなりたいな"]
 });
@@ -645,7 +646,7 @@ const prompt =
 
 あなたの情報：
 - 名前：${name}
-- 住んでいる場所：${pref}（都道府県レベルだけでOK。自宅の詳しい場所は絶対に出さないでください）
+- 住んでいる場所：${pref}${city? " " + city: ""}（都道府県と市区町村まででOKです。それより詳しい住所は絶対に出さないでください）
 - 招待コード（合言葉）：${code}
 ※このコードはあなた専用の本人確認用です。他人に教えたり、公開の場所に書いたりしないでください。
 
