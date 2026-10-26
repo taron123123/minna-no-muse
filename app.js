@@ -1,5 +1,5 @@
 import { MinnaData} from "./data.js";
-import { drawResidentCard, buildShareText, threadsIntentUrl, residentNo, registrationDateFromSlug, presentResidentCard, presentPostCard } from "./card.js";
+import { drawResidentCard, buildShareText, residentNo, registrationDateFromSlug, presentResidentCard, presentPostCard } from "./card.js";
 import { supportsVideoCapture, canShareFiles, captureMapPhoto, recordMapVideo, buildShotShareText } from "./capture.js";
 
 /* ================= 都道府県（代表点） ================= */
@@ -732,7 +732,6 @@ presentResidentCard(document.getElementById("joinCardCanvas"), {
 name, pref, city, avatar: avatarDataUrl || AV, hue: rec.hue, badge: "resident",
 noKey: code, regDate: new Date(), self: true
 }, {
-threads: document.getElementById("cardThreads"),
 native: document.getElementById("cardNative"),
 download: document.getElementById("cardDownload")
 }).catch(err => console.warn("住民票カードの生成に失敗しました", err));
@@ -773,7 +772,6 @@ presentResidentCard(document.getElementById("modalCardCanvas"), {
 name: r.name, pref: r.pref, city: r.city || "", avatar: r.avatar, hue: r.hue,
 badge: r.badge, noKey: r.slug, regDate: registrationDateFromSlug(r.slug), self: false
 }, {
-threads: document.getElementById("modalCardThreads"),
 native: document.getElementById("modalCardNative"),
 download: document.getElementById("modalCardDownload"),
 hint: document.getElementById("cardShareHint")
@@ -796,7 +794,6 @@ name: r.name, pref: r.pref, city: r.city || "", text: p.text,
 timeLabel: `${p.time.getMonth() + 1}/${p.time.getDate()} ${fmtTime(p.time)}`,
 avatar: r.avatar, hue: r.hue
 }, {
-threads: document.getElementById("postCardThreads"),
 native: document.getElementById("postCardNative"),
 download: document.getElementById("postCardDownload"),
 hint: document.getElementById("postShareHint")
@@ -953,9 +950,6 @@ vid.style.display = "none"; vid.removeAttribute("src"); vid.pause();
 img.style.display = ""; img.src = shotUrl;
 }
 const text = buildShotShareText(kind);
-document.getElementById("shotThreads").onclick = () => {
-window.open(threadsIntentUrl(text), "_blank", "noopener");
-};
 const ext = isVideo? (String(blob.type).includes("mp4")? "mp4": "webm"): "png";
 document.getElementById("shotDownload").onclick = () => {
 const a = document.createElement("a");
@@ -966,22 +960,20 @@ a.click();
 a.remove();
 };
 const nativeBtn = document.getElementById("shotNative");
-const threadsBtn = document.getElementById("shotThreads");
 const shareHint = document.getElementById("shotShareHint");
 const file = new File([blob], isVideo? `minna-no-muse-movie.${ext}`: "minna-no-muse-photo.png",
 { type: blob.type || (isVideo? "video/webm": "image/png")});
-/* ファイル自体を共有できる環境では、そちらを主導線にする。
- * Threads の intent URL は文章しか渡せないため、ボタン名と注記で
- * 「Threadsでシェア＝文章のみ」「シェア＝ファイルごと」を区別する。 */
+/* ファイル自体を共有できる環境では、「シェアする」を主導線（青ボタン）にする。
+ * Threads へは共有シートからアプリを選んでファイルごと投稿してもらう
+ * （intent URL で文章だけを送るボタンは誤解の元になるため置いていない）。 */
 const canShare = canShareFiles([file]);
 nativeBtn.style.display = canShare? "": "none";
 nativeBtn.textContent = isVideo? "📤 動画をシェア": "📤 画像をシェア";
 nativeBtn.classList.toggle("blue", canShare);
-threadsBtn.classList.toggle("blue", !canShare);
 if (shareHint) {
 shareHint.style.display = "";
 shareHint.textContent = canShare
-? `「${nativeBtn.textContent}」からThreadsアプリを選ぶと、${isVideo? "動画": "画像"}そのものを投稿できます。「Threadsでシェア」は文章だけの投稿です。`
+? `「${nativeBtn.textContent}」からThreadsアプリを選ぶと、${isVideo? "動画": "画像"}そのものを投稿できます。`
 : `このブラウザでは${isVideo? "動画": "画像"}ファイルを直接シェアできません。「保存する」で端末に保存してから、Threadsアプリで${isVideo? "動画": "画像"}を添付して投稿してください。`;
 }
 nativeBtn.onclick = async () => {

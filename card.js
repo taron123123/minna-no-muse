@@ -50,10 +50,6 @@ export function buildShareText(info) {
     `${SITE_URL}\n#みんなのMuse`;
 }
 
-export function threadsIntentUrl(text) {
-  return `https://www.threads.net/intent/post?text=${encodeURIComponent(text)}`;
-}
-
 /* ================= つぶやきカードのシェア文 =================
  * post: { name, pref, city, text } */
 export function buildPostShareText(post) {
@@ -229,8 +225,8 @@ function canvasBlob(canvas) {
   });
 }
 
-/* 描画済み canvas を PNG 化し、共有ボタン群（Threads／保存／Web Share）を配線する共通処理。
- * btns: { threads, native, download, hint } — いずれも省略可。
+/* 描画済み canvas を PNG 化し、共有ボタン群（保存／Web Share）を配線する共通処理。
+ * btns: { native, download, hint } — いずれも省略可。
  * hint は案内文を出す要素（任意）: ファイル共有が使える環境では
  * 「シェアする」からアプリへ画像ごと渡せる旨を、使えない環境では
  * 「一度保存してからThreadsアプリで添付」を表示する。
@@ -247,11 +243,6 @@ async function wireShareButtons(canvas, text, filename, btns) {
     file = null;
   }
 
-  if (btns.threads) {
-    btns.threads.onclick = () => {
-      window.open(threadsIntentUrl(text), "_blank", "noopener");
-    };
-  }
   if (btns.download) {
     btns.download.style.display = blob ? "" : "none";
     btns.download.onclick = () => {
@@ -288,7 +279,7 @@ async function wireShareButtons(canvas, text, filename, btns) {
   if (btns.hint) {
     btns.hint.style.display = "";
     btns.hint.textContent = canShare
-      ? "「シェアする」からThreadsアプリを選ぶと、画像そのものを投稿できます。「Threadsでシェア」は文章だけの投稿です。"
+      ? "「シェアする」からThreadsアプリを選ぶと、画像そのものを投稿できます。"
       : "このブラウザでは画像ファイルを直接シェアできません。「画像を保存」してから、Threadsアプリで画像を添付して投稿してください。";
   }
   return { text, blob };
