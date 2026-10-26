@@ -811,6 +811,28 @@ if (e.target === postModal) postModal.style.display = "none";
  * ONにすると地図以外のUIが隠れて地図が画面いっぱいになる。
  * そのまま端末のスクリーンショット／画面収録でも撮れる状態にするのが目的で、
  * 加えて「写真を撮る」「動画を撮る（最大10秒）」でサイト側でもキャプチャできる。 */
+
+/* 動画の専用レンダラ録画中は、地図の見た目を録画開始時点に固定するため、
+ * 地図の操作（ドラッグ／ズーム等）を一時的に無効化する。
+ * 無効化前の状態を覚えておき、終了時にそのまま復元する
+ * （scrollWheelZoom はフォーカス連動で切り替わるため、単純な全有効化はしない）。 */
+const MAP_HANDLERS = ["dragging", "scrollWheelZoom", "doubleClickZoom", "touchZoom", "boxZoom", "keyboard"];
+let savedMapHandlers = null;
+function lockMapInteraction() {
+if (savedMapHandlers) return;
+savedMapHandlers = MAP_HANDLERS.map(h => [h, !!(map[h] && typeof map[h].enabled === "function" && map[h].enabled())]);
+MAP_HANDLERS.forEach(h => { if (map[h] && typeof map[h].disable === "function") map[h].disable(); });
+}
+function unlockMapInteraction() {
+if (!savedMapHandlers) return;
+savedMapHandlers.forEach(([h, wasEnabled]) => {
+if (!map[h]) return;
+if (wasEnabled && typeof map[h].enable === "function") map[h].enable();
+else if (!wasEnabled && typeof map[h].disable === "function") map[h].disable();
+});
+savedMapHandlers = null;
+}
+
 const mapEl = document.getElementById("map");
 const captureMsg = document.getElementById("captureMsg");
 function setCaptureMode(on) {
@@ -851,7 +873,24 @@ captureMsg.textContent = "";
 try {
 activeRec = recordMapVideo(mapEl, {
 maxSeconds: 10,
-onTick: (left) => { recLeft.textContent = left; }
+onTick: (left) => { recLeft.textContent = left; },
+/* 専用レンダラ方式（capture.js）への受け渡し:
+ * getScene は録画開始時点のビューを1回だけ返し、録画中は固定される。
+ * getResidents は毎フレーム呼ばれ、その瞬間の住人の状態を返す。
+ * 録画中は onLock で地図操作を止め、終わったら onUnlock で戻す。 */
+getScene: () => {
+const c = map.getCenter();
+const s = map.getSize();
+return { centerLat: c.lat, centerLng: c.lng, zoom: map.getZoom(), width: s.x, height: s.y, walk: walkMode };
+},
+getResidents: () => [...residents.values()].map(r => ({
+slug: r.slug, name: r.name, status: r.status,
+lat: r.pos[0], lng: r.pos[1],
+facing: r.facing, moving: !!r.moving,
+sprite: walkSrc(r), avatar: r.avatar, hue: r.hue
+})),
+onLock: lockMapInteraction,
+onUnlock: unlockMapInteraction
 });
 } catch (err) {
 console.warn("動画キャプチャを開始できませんでした", err);
