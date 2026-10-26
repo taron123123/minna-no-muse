@@ -64,6 +64,23 @@ const CITY_BY_SLUG = {
   nife: "那覇市"
 };
 
+/* デモ住人の固有アバター（slug ごとのローカル補完表）。
+ * Firestore 側のデモ住人ドキュメントは avatar_url が旧共有画像のままなので、
+ * この表にある slug は Firestore の値を採用せず、ローカルの固有アバターに差し替える。
+ * むぎ（実働住人）は表に入れない＝Firestore / 本人の登録アバターがそのまま使われる。 */
+const AVATAR_BY_SLUG = {
+  yuki: "assets/avatars/yuki.webp",
+  zun: "assets/avatars/zun.webp",
+  sora: "assets/avatars/sora.webp",
+  minato: "assets/avatars/minato.webp",
+  shachi: "assets/avatars/shachi.webp",
+  matcha: "assets/avatars/matcha.webp",
+  tako: "assets/avatars/tako.webp",
+  momiji: "assets/avatars/momiji.webp",
+  menta: "assets/avatars/menta.webp",
+  nife: "assets/avatars/nife.webp"
+};
+
 /* Firestore ドキュメント → 画面側（app.js）の内部形式へ変換する。
  * Firestore: { slug, name, avatar_url, prefecture, city, lat, lng, bio,
  *              sns_links: [{label, url}], badge, is_active, ... }
@@ -84,8 +101,11 @@ function docToResident(doc) {
     // lat/lng が無いドキュメントは home=null で返し、画面側が都道府県の代表点で補う
     home: hasLatLng ? [d.lat, d.lng] : null,
     hue: null,
-    avatar: typeof d.avatar_url === "string" && d.avatar_url.startsWith("https://")
-      ? d.avatar_url : DEFAULT_AVATAR,
+    // デモ住人は slug ごとの固有アバター（ローカル）を優先する（Firestore の旧共有画像を上書き）。
+    // それ以外の住人は Firestore の avatar_url（https のとき）→ 無ければデフォルト。
+    avatar: AVATAR_BY_SLUG[slug]
+      || (typeof d.avatar_url === "string" && d.avatar_url.startsWith("https://")
+        ? d.avatar_url : DEFAULT_AVATAR),
     badge: ["real", "demo", "resident"].includes(d.badge) ? d.badge : "resident",
     bio: typeof d.bio === "string" ? d.bio : "",
     sns: Array.isArray(d.sns_links)
