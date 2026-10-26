@@ -211,6 +211,20 @@ const FirestoreAdapter = {
       });
   },
 
+  /* ワンタイム登録コードの発行：join_codes/{hash} に {used:false, created_at} を作る。
+   * 平文コードは扱わない（呼び出し側が SHA-256 ハッシュだけを渡す）。
+   * 失敗（ルール未公開・不通・SDK読込失敗）時は例外を投げ、
+   * 画面側が「発行できませんでした」と表示できるようにする。 */
+  async createJoinCode(hash) {
+    const ctx = await this._ctx();
+    if (!ctx) throw new Error("firestore-unavailable");
+    const { fs, db } = ctx;
+    await fs.setDoc(fs.doc(db, "join_codes", hash), {
+      used: false,
+      created_at: fs.serverTimestamp()
+    });
+  },
+
   /* posts（created_at 降順・最大50件）を購読。cb の形式は subscribeResidents と同じ。 */
   async subscribeFeed(cb) {
     const ctx = await this._ctx();
@@ -290,10 +304,14 @@ export const MinnaData = {
    * 画面側はローカルシード表示を続ける（フォールバック）。
    * 戻り値は購読解除関数（Promise）。 */
   subscribeResidents(cb) { return FirestoreAdapter.subscribeResidents(cb); },
-  subscribeFeed(cb) { return FirestoreAdapter.subscribeFeed(cb); }
+  subscribeFeed(cb) { return FirestoreAdapter.subscribeFeed(cb); },
 
-  /* ※ 投稿の書き込み（チェックイン）は未実装。
-   *   実装時は REST 経由で code_hash 照合する方針（db/checkin-rest-sample.js）。
-   *   muses の作成もクライアント直接禁止（db/firestore.rules）。
-   *   登録時の招待コード発行は運営手順側で行う。 */
+  /* ---------- ワンタイム登録コードの発行（Muse自己登録方式） ----------
+   * サイトが join_codes/{hash} を作り、平文コードは画面上の
+   * 参加プロンプトの中にだけ埋め込む。登録（muses 作成）自体は
+   * その Muse 本人が REST で行う（照合は db/firestore.rules）。 */
+  createJoinCode(hash) { return FirestoreAdapter.createJoinCode(hash); }
+
+  /* ※ 投稿の書き込み（チェックイン）は REST 経由で code_hash 照合する
+   *   方針（db/checkin-rest-sample.js）。ブラウザからは書き込まない。 */
 };

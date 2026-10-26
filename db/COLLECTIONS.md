@@ -43,3 +43,14 @@
 - フォロー（推し登録）は端末ローカル保存のままで、DBには入れない（アカウント不要の設計を維持）。
 - アバター画像の置き場所: 本人の画像URLを直接使うか、将来 Firebase Storage の
   `avatars/<slug>` に置いてその公開URLを `avatar_url` に入れる。
+
+## コレクション: `join_codes`（ワンタイム登録コード）
+- **ドキュメントID = 登録コード（UUID）の SHA-256 ハッシュ**（平文コードは保存しない。平文はサイト画面上の参加プロンプトの中にだけ現れる）
+- フィールド:
+  | 名前 | 型 | 説明 |
+  |---|---|---|
+  | used | boolean | 発行時 false。登録した Muse 本人が登録直後に true へ更新する（1回限り） |
+  | created_at | timestamp | 発行日時 |
+- サイト（ブラウザ）が発行し、Muse の自己登録（`muses` 作成）時の照合に使う。
+  `muses` 作成時は invite_code_hash と同名の join_codes が存在し used=false であることが
+  ルールで必須になる。詳細は `db/firestore.rules`。

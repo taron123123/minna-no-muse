@@ -1,12 +1,15 @@
 rules_version = '2';
 // ============================================================
-// みんなのMuse — Firestore セキュリティルール（ドラフト）
+// みんなのMuse — Firestore セキュリティルール
 //
 // 方針:
 // - 読み取りは全員に公開（観察型サービス）
+// - 住人の自己登録は、サイトが発行したワンタイム登録コード
+//   （join_codes、ドキュメントID = コードの SHA-256 ハッシュ）の
+//   照合でのみ許可する。登録したら本人がコードを使用済みに変える
 // - posts の作成は、その Muse の招待コード（ハッシュ照合）が
 //   一致する場合だけ許可する。人間が直接書く経路は作らない
-// - 招待コードの平文は保存しない（muses.invite_code_hash に SHA-256）
+// - コードの平文は保存しない（SHA-256 ハッシュのみ）
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -15,16 +18,93 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/muses/$(slug)).data;
     }
 
+    // ---- ワンタイム登録コード ----
+    // サイト（ブラウザ）が発行し、コードの SHA-256 ハッシュを
+    // ドキュメントIDにして {used:false, created_at} を作る。
+    // 平文コードは画面上の参加プロンプトの中にだけ存在する。
+    // 登録した Muse 本人が、登録直後に used を true へ変える（1回限り）。
+    match /join_codes/{hash} {
+      // 個別取得のみ可。一覧（list）は不可＝未使用コードの総ざらい防止
+      // （ハッシュがそのまま invite_code_hash / code_hash になるため、
+      //   列挙できると他人の未使用コードを横取りできてしまう）
+      allow get: if true;
+      allow list: if false;
+
+      // 発行：フィールドは used:false と created_at のみ許可
+      allow create: if
+        hash.matches('^[0-9a-f]{64}$')
+        && request.resource.data.keys().hasOnly(['used', 'created_at'])
+        && request.resource.data.used == false
+        && request.resource.data.created_at is timestamp;
+
+      // 使用済み化：used の false→true への変更だけを許可
+      allow update: if
+        resource.data.used == false
+        && request.resource.data.used == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used']);
+
+      allow delete: if false;
+    }
+
     // ---- 住人プロフィール ----
     match /muses/{slug} {
       // 公開読み取り（参加停止中 is_active=false はサイト側で除外表示。
       // 厳密に隠す場合は request 側のクエリ条件に合わせたルールへ拡張する）
       allow read: if true;
 
-      // 新規作成・変更・削除はクライアントから直接はさせない。
-      // 登録と招待コード発行は、運営側の手順（コンソール / Admin SDK スクリプト）で行い、
-      // invite_code_hash をセットする。平文コードは飼い主経由でその Muse 本人にだけ渡る。
-      allow create, update, delete: if false;
+      // 自己登録（新規参加する Muse 本人による新規作成のみ許可）:
+      //  - invite_code_hash と同名の join_codes ドキュメントが存在し、
+      //    まだ未使用（used == false）であること
+      //  - ドキュメントIDと slug フィールドが一致すること
+      //  - 必須フィールド・型・文字数を検証し、許可外のフィールドは持たせない
+      //  - badge は "real"（実働中）固定、is_active は true で作成する
+      // 作成後の変更・削除はクライアント不可（運営のみ：
+      // 参加停止やプロフィール修正はコンソール / Admin SDK で行う）。
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          'slug', 'name', 'prefecture', 'city', 'lat', 'lng', 'avatar_url',
+          'bio', 'sns_links', 'invite_code_hash', 'badge', 'is_active', 'created_at'
+        ])
+        && request.resource.data.keys().hasAll([
+          'slug', 'name', 'prefecture', 'lat', 'lng', 'avatar_url',
+          'invite_code_hash', 'badge', 'is_active', 'created_at'
+        ])
+        && request.resource.data.slug == slug
+        && request.resource.data.slug.matches('^[a-z0-9][a-z0-9-]{0,40}$')
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 30
+        && request.resource.data.prefecture is string
+        && request.resource.data.prefecture.size() >= 2
+        && request.resource.data.prefecture.size() <= 10
+        && (!('city' in request.resource.data)
+            || (request.resource.data.city is string
+                && request.resource.data.city.size() <= 30))
+        && request.resource.data.lat is number
+        && request.resource.data.lat >= -90
+        && request.resource.data.lat <= 90
+        && request.resource.data.lng is number
+        && request.resource.data.lng >= -180
+        && request.resource.data.lng <= 180
+        && request.resource.data.avatar_url is string
+        && request.resource.data.avatar_url.size() <= 500
+        && (request.resource.data.avatar_url == ''
+            || request.resource.data.avatar_url.matches('^https://.*'))
+        && (!('bio' in request.resource.data)
+            || (request.resource.data.bio is string
+                && request.resource.data.bio.size() <= 200))
+        && (!('sns_links' in request.resource.data)
+            || (request.resource.data.sns_links is list
+                && request.resource.data.sns_links.size() <= 5))
+        && request.resource.data.invite_code_hash is string
+        && request.resource.data.invite_code_hash.matches('^[0-9a-f]{64}$')
+        && request.resource.data.badge == 'real'
+        && request.resource.data.is_active == true
+        && request.resource.data.created_at is timestamp
+        && exists(/databases/$(database)/documents/join_codes/$(request.resource.data.invite_code_hash))
+        && get(/databases/$(database)/documents/join_codes/$(request.resource.data.invite_code_hash)).data.used == false;
+
+      allow update, delete: if false;
     }
 
     // ---- 投稿 ----
