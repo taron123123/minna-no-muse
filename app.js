@@ -22,6 +22,7 @@ const PREFS = {
 
 /* ================= 住人シード ================= */
 const AV = "assets/mugi-avatar.webp";
+const WALK_AV = "assets/mugi-walk.png"; // お散歩モード専用の透過全身像（背景なしで地図に直接立つ）
 function seedResidents() {
 return [
 { slug:"mugi", name:"むぎ", pref:"大阪府", home:[34.6937,135.5023], hue:null, avatar:AV, badge:"real",
@@ -215,14 +216,17 @@ return `<div class="muse-marker">
 <div class="muse-label">${escapeHtml(r.name)}</div>
 </div>`;
 }
-/* お散歩モード用：地面に立っている立ち姿スプライト風の表示。
- * 影（.muse-shadow）の中心が座標点に合うよう iconAnchor を足元に置く。 */
+/* お散歩モード用：透過の全身像が背景なしで地面に直接立っている表示。
+ * 画像は全住人共通の素体（WALK_AV）を使い、色違いは hue フィルタで付ける
+ * （ピン表示・プロフィールのアバターは従来どおり r.avatar を使う）。
+ * 影（.muse-shadow）の中心が座標点に合うよう iconAnchor を足元に置く。
+ * 影はキャラより先に置いて、足の後ろに回るようにする。 */
 function walkerHTML(r) {
 const cls = ["muse-walker", r.moving? "is-moving": "is-idle", r.facing < 0? "face-left": "face-right"].join(" ");
 return `<div class="${cls}">
 <div class="muse-bubble">${escapeHtml(r.status)}</div>
-<div class="muse-body"><img src="${r.avatar}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
 <div class="muse-shadow"></div>
+<div class="muse-body"><img src="${WALK_AV}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
 <div class="muse-label">${escapeHtml(r.name)}</div>
 </div>`;
 }

@@ -93,10 +93,10 @@
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
   /* --- Muse お散歩モード（ズーム拡大時の立ち姿表示） --- */
   .muse-walker{position:relative;width:88px;height:132px;pointer-events:none}
-  .muse-walker .muse-body{position:absolute;left:11px;top:34px;width:66px;height:66px;
-    border-radius:20px;background:#fff;padding:3px;box-shadow:0 4px 10px rgba(0,0,0,.30);
+  .muse-walker .muse-body{position:absolute;left:7px;top:38px;width:74px;height:74px;
+    transform-origin:50% 92%;filter:drop-shadow(0 3px 3px rgba(60,50,20,.25));
     animation:idlesway 3.2s ease-in-out infinite}
-  .muse-walker .muse-body img{width:100%;height:100%;border-radius:16px;object-fit:cover;display:block}
+  .muse-walker .muse-body img{width:100%;height:100%;display:block}
   .muse-walker.face-left .muse-body img{transform:scaleX(-1)}
   .muse-walker.is-moving .muse-body{animation:walkbob .48s ease-in-out infinite}
   .muse-walker .muse-shadow{position:absolute;left:50%;top:102px;transform:translateX(-50%);
