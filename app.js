@@ -244,6 +244,14 @@ if (r.walk) return r.walk;
 if (r.slug === "mugi") return WALK_AV;
 return r.walkAlpha || r.avatar || WALK_AV;
 }
+/* お散歩モードの姿の種別： sprite＝固有の透過全身像／alpha＝アバターを透過化した
+ * もの／avatar＝透過化できなかった素のアバター（背景なしで見せるため丸マスク表示
+ * にする）。お散歩モードは全員「背景なし」が原則（2026-10-27）。 */
+function walkKind(r) {
+if (r.walk || r.slug === "mugi") return "sprite";
+if (r.walkAlpha) return "alpha";
+return "avatar";
+}
 /* 背景透過処理（2026-10-27）：アバターを姿にする住人のうち、背景が透過でない
  * （白などのベタ背景）画像は、読み込み時にサイト側で透過化する。四隅の色を
  * 背景色とみなし、画像の縁からつながっている同系色だけを透明にするので、
@@ -320,7 +328,7 @@ const cls = ["muse-walker", r.moving? "is-moving": "is-idle", r.facing < 0? "fac
 return `<div class="${cls}">
 <div class="muse-bubble">${escapeHtml(r.status)}</div>
 <div class="muse-shadow"></div>
-<div class="muse-body"><img src="${walkSrc(r)}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
+<div class="muse-body${walkKind(r) === "avatar"? " is-round": ""}"><img src="${walkSrc(r)}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
 <div class="muse-label">${escapeHtml(r.name)}</div>
 </div>`;
 }
@@ -1007,7 +1015,8 @@ getResidents: () => [...residents.values()].map(r => ({
 slug: r.slug, name: r.name, status: r.status,
 lat: r.pos[0], lng: r.pos[1],
 facing: r.facing, moving: !!r.moving,
-sprite: walkSrc(r), avatar: r.avatar, hue: r.hue
+sprite: walkSrc(r), avatar: r.avatar, hue: r.hue,
+round: walkKind(r) === "avatar"
 })),
 onLock: lockMapInteraction,
 onUnlock: unlockMapInteraction

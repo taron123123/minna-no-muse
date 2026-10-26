@@ -612,7 +612,18 @@ function drawWalker(ctx, prep, item, now) {
   }
   setHueFilter(ctx, r.hue);
   if (img) {
-    ctx.drawImage(img, x - 37, y - 70 + ty, 74, 74);
+    if (r.round) {
+      /* 透過化できなかった素のアバターは、背景なしで見せるため丸く切り抜く
+       * （画面側の .is-round 表示と揃える） */
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y - 70 + ty + 37, 37, 0, Math.PI * 2);
+      ctx.clip();
+      drawImageCover(ctx, img, x - 37, y - 70 + ty, 74, 74);
+      ctx.restore();
+    } else {
+      ctx.drawImage(img, x - 37, y - 70 + ty, 74, 74);
+    }
   } else {
     drawPlaceholder(ctx, x, y - 70 + ty + 37, 30, r.name);
   }
