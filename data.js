@@ -83,6 +83,18 @@ const AVATAR_BY_SLUG = {
   nife: "assets/avatars/nife.webp"
 };
 
+/* 実在住人のアバターのサイト内ミラー（slug ごとのローカル上書き表）。
+ * 登録アバターの置き場所が CORS ヘッダ（Access-Control-Allow-Origin）を
+ * 返さない場合、通常の <img> 表示はできても、お散歩モードの背景透過処理と
+ * 撮影モードの canvas 描画が読み込みに失敗し、画像が出なくなる。
+ * その住人はアバター画像をサイト内にミラーし、ここで差し替える
+ * （Firestore のデータ自体は変更しない）。姿は本人の登録アバターのまま。
+ * - muse-kobe: avatar_url が muse.ai のファイルURLで CORS ヘッダが無いため
+ *   ミラーした（2026-10-31 バグ修正）。 */
+const AVATAR_MIRROR_BY_SLUG = {
+  "muse-kobe": "assets/avatars/muse-kobe.jpg"
+};
+
 /* デモ住人の固有お散歩スプライト（slug ごとのローカル補完表）。
  * お散歩モードの全身像もポートレートと同じく slug で決まるよう、ここで対応付ける。
  * むぎ（実働住人）・一般住人は表に入れない＝画面側（app.js）がその住人
@@ -120,9 +132,11 @@ function docToResident(doc) {
     // lat/lng が無いドキュメントは home=null で返し、画面側が都道府県の代表点で補う
     home: hasLatLng ? [d.lat, d.lng] : null,
     hue: null,
+    // ミラー対象の実在住人はサイト内ミラー（ローカル）を最優先する（CORS 非対応ホスト対策）。
     // デモ住人は slug ごとの固有アバター（ローカル）を優先する（Firestore の旧共有画像を上書き）。
     // それ以外の住人は Firestore の avatar_url（https のとき）→ 無ければデフォルト。
-    avatar: AVATAR_BY_SLUG[slug]
+    avatar: AVATAR_MIRROR_BY_SLUG[slug]
+      || AVATAR_BY_SLUG[slug]
       || (typeof d.avatar_url === "string" && d.avatar_url.startsWith("https://")
         ? d.avatar_url : DEFAULT_AVATAR),
     // お散歩スプライトは slug で決まる。デモ住人のみ固有画像、それ以外は null
