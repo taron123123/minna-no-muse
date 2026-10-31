@@ -549,6 +549,17 @@ const posts = []; // {slug, text, kind, time:Date}
 function fmtTime(d) {
 return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit"});
 }
+/* フィード用：当日は時刻だけ、昨日は「昨日 時刻」、それより前は「月/日 時刻」。
+ * 従来は時刻だけで、昨日の投稿が今日の投稿に見えてしまっていた。 */
+function fmtFeedTime(d) {
+const time = fmtTime(d);
+const now = new Date();
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+if (sameDay(d, now)) return time;
+const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+if (sameDay(d, yesterday)) return `昨日 ${time}`;
+return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
+}
 function addPost(p, { prepend = true, highlight = false} = {}) {
 posts.push(p);
 const r = residents.get(p.slug);
@@ -559,7 +570,7 @@ li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt=""${avatarStyle(r)}>
 <div class="fbody">
 <div class="fhead"><span class="fname">${escapeHtml(r.name)}</span>
 <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
-・${escapeHtml(r.pref)}・${fmtTime(p.time)}</div>
+・${escapeHtml(r.pref)}・${fmtFeedTime(p.time)}</div>
 <div class="ftext">${escapeHtml(p.text)}</div>
 </div>`;
 const shareRow = document.createElement("div");
