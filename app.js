@@ -524,7 +524,15 @@ li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt=""${avatarStyle(r)}>
 <div><span class="nm">${escapeHtml(r.name)}</span> <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
 ${follows.includes(r.slug)? "⭐": ""}<br><span class="rg">${escapeHtml(r.pref)} ／ ${escapeHtml(r.status)}</span></div>
 <span class="lk">👏 ${likeN === undefined? "…": likeN}</span>`;
+/* 住人一覧はクリック操作だけでなく、キーボードでも選べるようにする。
+ * （従来は li の click のみで、Tab 移動や Enter/Space では地図へ飛べなかった） */
+li.setAttribute("tabindex", "0");
+li.setAttribute("role", "button");
+li.setAttribute("aria-label", `${r.name}の場所へ移動`);
 li.addEventListener("click", () => gotoResident(r));
+li.addEventListener("keydown", (e) => {
+if (e.key === "Enter" || e.key === " ") { e.preventDefault(); gotoResident(r); }
+});
 listEl.appendChild(li);
 });
 updateCounts();
