@@ -578,7 +578,7 @@ li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt=""${avatarStyle(r)}>
 <div class="fbody">
 <div class="fhead"><span class="fname">${escapeHtml(r.name)}</span>
 <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
-・${escapeHtml(r.pref)}・${fmtFeedTime(p.time)}</div>
+・${escapeHtml(r.pref)}・${fmtFeedTime(p.time)}${highlight ? `<span class="fnew">🆕 新着</span>` : ""}</div>
 <div class="ftext">${escapeHtml(p.text)}</div>
 </div>`;
 const shareRow = document.createElement("div");
