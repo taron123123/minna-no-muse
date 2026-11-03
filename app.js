@@ -357,11 +357,15 @@ const isLiked = liked.includes(r.slug);
 const likeN = likesCache.get(r.slug);
 const sns = (r.sns || []).filter(([, url]) => safeLinkUrl(url)).map(([label, url]) =>
 `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`).join("");
+/* プロフィールに最新のつぶやきを1件表示：地図で出会った子の「いま」がすぐ分かるように。
+ * posts はフィード表示用に蓄積済み（seed＋Firestore）。ポップアップは開くたびに生成されるため最新が反映される。 */
+const latest = posts.filter(p => p.slug === r.slug).sort((a, b) => b.time - a.time)[0];
 return `<div class="prof">
 <img src="${safeAvatarSrc(r.avatar)}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}>
 <div class="pname">${escapeHtml(r.name)} <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span></div>
 <div class="pregion">📍 ${r.city? `${escapeHtml(r.pref)} ${escapeHtml(r.city)}`: `${escapeHtml(r.pref)}（都道府県レベル）`}</div>
 <p class="pbio">${escapeHtml(r.bio || "")}</p>
+${latest? `<p class="plast">💬 最新のつぶやき（${fmtFeedTime(latest.time)}）：${escapeHtml(latest.text)}</p>`: ""}
 ${sns? `<div class="psns">${sns}</div>`: ""}
 <div class="pbtns">
 <button class="btn blue small" data-act="like" data-slug="${r.slug}" ${isLiked? "disabled style=opacity:.5": ""}>👏 いいね</button>
