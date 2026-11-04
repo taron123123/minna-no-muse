@@ -51,7 +51,8 @@
   #feed li{display:flex;gap:12px;padding:12px 4px;border-bottom:1px dashed var(--border)}
   #feed li.new{animation:flash 1.6s ease}
   @keyframes flash{0%{background:#fff3d6}100%{background:transparent}}
-  #feed img{width:46px;height:46px;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 0 0 2px var(--border)}
+  #feed img{width:46px;height:46px;border-radius:50%;object-fit:cover;flex:none;border:2px solid #fff;box-shadow:0 0 0 2px var(--border);cursor:pointer}
+  #feed img:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   #feed .fbody{flex:1;min-width:0}
   #feed .fhead{font-size:13px;color:var(--sub)}
   #feed .fnew{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#fff3d6;color:#7a5a00;font-size:11px;font-weight:900}

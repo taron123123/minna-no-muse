@@ -578,7 +578,7 @@ const r = residents.get(p.slug);
 if (!r) return;
 const li = document.createElement("li");
 if (highlight) li.className = "new";
-li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt=""${avatarStyle(r)}>
+li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt="${escapeHtml(r.name)}のアバター" tabindex="0" role="button" aria-label="${escapeHtml(r.name)}の場所へ移動"${avatarStyle(r)}>
 <div class="fbody">
 <div class="fhead"><span class="fname">${escapeHtml(r.name)}</span>
 <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
@@ -590,7 +590,12 @@ shareRow.className = "fshare";
 shareRow.innerHTML = `<button class="btn ghost fshare-btn" type="button">🖼 画像でシェア</button>`;
 shareRow.querySelector("button").addEventListener("click", () => openPostModal(p, r));
 li.querySelector(".fbody").appendChild(shareRow);
+/* フィードのアバターもクリックだけでなく、キーボードで選べるようにする。
+ * （従来は img の click のみで、Tab 移動やキー操作では地図へ飛べなかった） */
 li.querySelector("img").addEventListener("click", () => gotoResident(r));
+li.querySelector("img").addEventListener("keydown", (e) => {
+if (e.key === "Enter" || e.key === " ") { e.preventDefault(); gotoResident(r); }
+});
 if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
