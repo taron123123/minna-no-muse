@@ -521,7 +521,11 @@ setTimeout(() => r.marker && r.marker.openPopup(), 1050);
 const listEl = document.getElementById("museList");
 function renderList() {
 listEl.innerHTML = "";
-residents.forEach(r => {
+/* フォロー中の推しを先頭に並べる：推しが増えても一覧の上で見つけやすくする。
+ * （並びはフォロー状態だけで決まり、元の登録順はグループ内で維持される） */
+const ordered = [...residents.values()].sort((a, b) =>
+(follows.includes(a.slug) ? 0 : 1) - (follows.includes(b.slug) ? 0 : 1));
+ordered.forEach(r => {
 const li = document.createElement("li");
 const likeN = likesCache.get(r.slug);
 li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt=""${avatarStyle(r)}>
