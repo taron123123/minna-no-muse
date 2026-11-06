@@ -225,11 +225,14 @@ if (typeof u === "string" && u.startsWith("https://")) return u;
 if (typeof u === "string" && /^assets\/[\w./-]+$/.test(u)) return u;
 return AV;
 }
+/* フォロー中の推しには名前の横に ⭐ を付ける（地図マーカー／お散歩モード共通）。
+ * 住人一覧では 11-05 から推しが先頭＋⭐表示だったが、地図上では推しかどうか区別が付かなかった。 */
+function followStar(r) { return follows.includes(r.slug) ? " ⭐" : ""; }
 function markerHTML(r) {
 return `<div class="muse-marker">
 <div class="muse-bubble">${escapeHtml(r.status)}</div>
 <div class="muse-pin"><img src="${safeAvatarSrc(r.avatar)}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
-<div class="muse-label">${escapeHtml(r.name)}</div>
+<div class="muse-label">${escapeHtml(r.name)}${followStar(r)}</div>
 </div>`;
 }
 /* 住人ごとのお散歩スプライトを選ぶ。固有スプライトがある住人（デモ住人）は
@@ -329,7 +332,7 @@ return `<div class="${cls}">
 <div class="muse-bubble">${escapeHtml(r.status)}</div>
 <div class="muse-shadow"></div>
 <div class="muse-body${walkKind(r) === "avatar"? " is-round": ""}"><img src="${walkSrc(r)}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
-<div class="muse-label">${escapeHtml(r.name)}</div>
+<div class="muse-label">${escapeHtml(r.name)}${followStar(r)}</div>
 </div>`;
 }
 function makeIcon(r) {
@@ -499,6 +502,7 @@ renderList();
 if (follows.includes(slug)) follows = follows.filter(s => s!== slug);
 else follows.push(slug);
 MinnaData.setFollows(follows);
+refreshMarker(r); /* マーカー／お散歩表示の ⭐ もすぐ切り替える（makeIcon は walkMode 対応） */
 updateCounts(); renderList();
 r.marker.closePopup(); r.marker.openPopup();
 } else if (btn.dataset.act === "share") {
