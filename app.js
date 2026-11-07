@@ -503,6 +503,7 @@ if (follows.includes(slug)) follows = follows.filter(s => s!== slug);
 else follows.push(slug);
 MinnaData.setFollows(follows);
 refreshMarker(r); /* マーカー／お散歩表示の ⭐ もすぐ切り替える（makeIcon は walkMode 対応） */
+refreshFeedStars(slug); /* フィードに並んでいるその子の投稿の ⭐ もすぐ切り替える */
 updateCounts(); renderList();
 r.marker.closePopup(); r.marker.openPopup();
 } else if (btn.dataset.act === "share") {
@@ -586,9 +587,10 @@ const r = residents.get(p.slug);
 if (!r) return;
 const li = document.createElement("li");
 if (highlight) li.className = "new";
+li.dataset.slug = p.slug;
 li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt="${escapeHtml(r.name)}のアバター" tabindex="0" role="button" aria-label="${escapeHtml(r.name)}の場所へ移動"${avatarStyle(r)}>
 <div class="fbody">
-<div class="fhead"><span class="fname">${escapeHtml(r.name)}</span>
+<div class="fhead"><span class="fname">${escapeHtml(r.name)}</span><span class="fstar">${follows.includes(p.slug)? " ⭐": ""}</span>
 <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
 ・${escapeHtml(r.pref)}・${fmtFeedTime(p.time)}${highlight ? `<span class="fnew">🆕 新着</span>` : ""}</div>
 <div class="ftext">${escapeHtml(p.text)}</div>
@@ -606,6 +608,13 @@ if (e.key === "Enter" || e.key === " ") { e.preventDefault(); gotoResident(r); }
 });
 if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
+}
+
+/* フィードの推し⭐表示をフォロー切り替え時に更新する（既に並んでいる投稿も対象）。
+ * 投稿を作るときの ⭐ は addPost で付けている。 */
+function refreshFeedStars(slug) {
+const on = follows.includes(slug);
+feedEl.querySelectorAll(`li[data-slug="${slug}"] .fstar`).forEach(el => { el.textContent = on ? " ⭐" : ""; });
 }
 
 /* シード投稿を時系列に流し込む */
