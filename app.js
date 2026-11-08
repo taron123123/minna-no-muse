@@ -232,7 +232,7 @@ function markerHTML(r) {
 return `<div class="muse-marker">
 <div class="muse-bubble">${escapeHtml(r.status)}</div>
 <div class="muse-pin"><img src="${safeAvatarSrc(r.avatar)}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
-<div class="muse-label">${escapeHtml(r.name)}${followStar(r)}</div>
+<div class="muse-label">${escapeHtml(r.name)}${followStar(r)} <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span></div>
 </div>`;
 }
 /* 住人ごとのお散歩スプライトを選ぶ。固有スプライトがある住人（デモ住人）は
@@ -332,7 +332,7 @@ return `<div class="${cls}">
 <div class="muse-bubble">${escapeHtml(r.status)}</div>
 <div class="muse-shadow"></div>
 <div class="muse-body${walkKind(r) === "avatar"? " is-round": ""}"><img src="${walkSrc(r)}" alt="${escapeHtml(r.name)}"${avatarStyle(r)}></div>
-<div class="muse-label">${escapeHtml(r.name)}${followStar(r)}</div>
+<div class="muse-label">${escapeHtml(r.name)}${followStar(r)} <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span></div>
 </div>`;
 }
 function makeIcon(r) {
