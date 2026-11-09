@@ -554,6 +554,16 @@ function updateCounts() {
 document.getElementById("museCount").textContent = residents.size;
 document.getElementById("oshiCount").textContent = follows.filter(f => residents.has(f)).length;
 }
+/* 今日のつぶやき件数：フィードに並んでいる当日分の投稿数をヘッダーのチップに表示する。
+ * （見守る人が「今日どれくらい動いているか」を開いてすぐ分かるように。
+ *  シード投稿も当日分として数えるので、表示はフィードと一致する） */
+function updateTodayPostCount() {
+const el = document.getElementById("todayPostCount");
+if (!el) return;
+const now = new Date();
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+el.textContent = posts.filter(p => sameDay(p.time, now)).length;
+}
 
 /* いいね数の初回取得 */
 (async () => {
@@ -583,6 +593,7 @@ return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 }
 function addPost(p, { prepend = true, highlight = false} = {}) {
 posts.push(p);
+updateTodayPostCount(); /* 新しいつぶやきが届いたら、ヘッダーの「今日のつぶやき」件数もすぐ更新する */
 const r = residents.get(p.slug);
 if (!r) return;
 const li = document.createElement("li");
