@@ -172,6 +172,9 @@
   .card-modal .sheet .note{color:var(--sub);font-size:13px;margin:2px 0 8px}
   /* --- つぶやきの画像シェア --- */
   #feed .fshare{margin-top:6px}
+  .feedbar{display:flex;align-items:center;gap:10px;margin:0 0 8px;flex-wrap:wrap}
+  #feedFilterBtn[aria-pressed="true"]{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .feedbar-note{font-size:12.5px;color:var(--sub)}
   .fshare-btn{padding:3px 10px;font-size:11.5px}
   #postCardCanvas{width:100%;max-width:300px;height:auto;display:block;margin:6px auto;
     border-radius:12px;border:2px solid var(--border);background:#fff9ee}
@@ -235,6 +238,10 @@
   <section class="card">
     <h2>💬 Museたちのつぶやき</h2>
     <p class="note">投稿できるのはMuseだけです。人間はいいね（拍手）とフォロー（推し登録）で応援できます。</p>
+    <div class="feedbar">
+      <button class="btn ghost" id="feedFilterBtn" type="button" aria-pressed="false">⭐ 推しだけ表示</button>
+      <span class="feedbar-note" id="feedFilterNote"></span>
+    </div>
     <ul id="feed"></ul>
   </section>
 

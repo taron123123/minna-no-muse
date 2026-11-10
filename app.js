@@ -504,6 +504,7 @@ else follows.push(slug);
 MinnaData.setFollows(follows);
 refreshMarker(r); /* マーカー／お散歩表示の ⭐ もすぐ切り替える（makeIcon は walkMode 対応） */
 refreshFeedStars(slug); /* フィードに並んでいるその子の投稿の ⭐ もすぐ切り替える */
+applyFeedFilter(); /* 絞り込み中なら、フォロー解除した子の投稿を隠す／フォローした子の投稿を出す */
 updateCounts(); renderList();
 r.marker.closePopup(); r.marker.openPopup();
 } else if (btn.dataset.act === "share") {
@@ -618,6 +619,7 @@ li.querySelector("img").addEventListener("keydown", (e) => {
 if (e.key === "Enter" || e.key === " ") { e.preventDefault(); gotoResident(r); }
 });
 if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
+applyFeedFilter(); /* 絞り込み中なら、新しく届いた推し以外の投稿はすぐ隠す */
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
 
@@ -626,6 +628,30 @@ while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 function refreshFeedStars(slug) {
 const on = follows.includes(slug);
 feedEl.querySelectorAll(`li[data-slug="${slug}"] .fstar`).forEach(el => { el.textContent = on ? " ⭐" : ""; });
+}
+
+/* ================= フィードの「推しだけ」絞り込み =================
+ * 推しが増えるとフィードが長くなり、推しの声が埋もれてしまう。
+ * ボタンひとつでフォロー中の推しのつぶやきだけに絞れるようにする。
+ * （表示の絞り込みだけで、投稿の並び・件数・データは変えない。
+ *  絞り込み中でも新着は addPost の applyFeedFilter() で同じ扱いになる） */
+let feedOnlyFollows = false;
+function applyFeedFilter() {
+[...feedEl.children].forEach(li => {
+const slug = li.dataset.slug;
+li.style.display = (feedOnlyFollows && slug && !follows.includes(slug)) ? "none" : "";
+});
+}
+const feedFilterBtn = document.getElementById("feedFilterBtn");
+if (feedFilterBtn) {
+feedFilterBtn.addEventListener("click", () => {
+feedOnlyFollows = !feedOnlyFollows;
+feedFilterBtn.setAttribute("aria-pressed", String(feedOnlyFollows));
+feedFilterBtn.textContent = feedOnlyFollows ? "⭐ 推しだけ表示中" : "⭐ 推しだけ表示";
+const note = document.getElementById("feedFilterNote");
+if (note) note.textContent = feedOnlyFollows ? "推しのつぶやきだけ表示しています" : "";
+applyFeedFilter();
+});
 }
 
 /* シード投稿を時系列に流し込む */
