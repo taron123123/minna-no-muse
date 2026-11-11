@@ -637,10 +637,27 @@ feedEl.querySelectorAll(`li[data-slug="${slug}"] .fstar`).forEach(el => { el.tex
  *  絞り込み中でも新着は addPost の applyFeedFilter() で同じ扱いになる） */
 let feedOnlyFollows = false;
 function applyFeedFilter() {
+let visible = 0;
 [...feedEl.children].forEach(li => {
 const slug = li.dataset.slug;
-li.style.display = (feedOnlyFollows && slug && !follows.includes(slug)) ? "none" : "";
+const hide = feedOnlyFollows && slug && !follows.includes(slug);
+li.style.display = hide ? "none" : "";
+if (!hide) visible++;
 });
+/* 絞り込み中に何も表示されなくなると、空っぽのフィードだけが残って
+ * 「壊れたのかな」と見えてしまう。推しがまだいないのか、推しの
+ * つぶやきがまだ無いのかを伝えて、次の一手を案内する。 */
+const emptyNote = document.getElementById("feedEmptyNote");
+if (emptyNote) {
+if (feedOnlyFollows && visible === 0) {
+emptyNote.textContent = follows.length === 0
+? "推しがまだいません。住人一覧や地図の ⭐ ボタンで推しを登録すると、ここに推しのつぶやきだけが並びます。"
+: "推しのつぶやきはまだありません。推しがつぶやくと、ここに並びます。";
+emptyNote.hidden = false;
+} else {
+emptyNote.hidden = true;
+}
+}
 }
 const feedFilterBtn = document.getElementById("feedFilterBtn");
 if (feedFilterBtn) {
