@@ -493,7 +493,9 @@ if (!r) return;
 if (btn.dataset.act === "like") {
 if (liked.includes(slug)) return;
 liked.push(slug); MinnaData.setLiked(liked);
-btn.disabled = true; btn.style.opacity = ".5";
+/* フィードには同じ子のボタンが複数並ぶので、押したボタンだけでなく
+ * その子の全いいねボタンを無効化する（プロフィールのボタンも同じ扱い）。 */
+document.querySelectorAll(`[data-act="like"][data-slug="${slug}"]`).forEach(b => { b.disabled = true; b.style.opacity = ".5"; });
 const n = await MinnaData.hitLike(slug);
 if (n!== null) likesCache.set(slug, n);
 document.querySelectorAll(`[data-likes="${slug}"]`).forEach(el => el.textContent = likesCache.get(slug));
@@ -571,6 +573,12 @@ el.textContent = posts.filter(p => sameDay(p.time, now)).length;
 await Promise.all([...residents.keys()].map(async slug => {
 likesCache.set(slug, await MinnaData.getLikes(slug));
 }));
+/* フィードの拍手件数も初回取得で更新する（取得前は「…」のままになるため）。
+ * プロフィールは開くたび生成され直すので従来どおり、一覧は renderList が更新する。 */
+document.querySelectorAll("[data-likes]").forEach(el => {
+const n = likesCache.get(el.dataset.likes);
+if (n !== undefined) el.textContent = n;
+});
 renderList();
 })();
 renderList();
@@ -609,7 +617,13 @@ li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt="${escapeHtml(r.name)}
 </div>`;
 const shareRow = document.createElement("div");
 shareRow.className = "fshare";
-shareRow.innerHTML = `<button class="btn ghost fshare-btn" type="button">🖼 画像でシェア</button>`;
+/* フィードから直接拍手できるようにする：プロフィールを開かなくても
+ * 気になったつぶやきにすぐ 👏 できる。件数はプロフィール・一覧と
+ * 同じ likesCache から表示し、委譲ハンドラが全表示を更新する。 */
+const feedLiked = liked.includes(p.slug);
+const feedLikeN = likesCache.get(p.slug);
+shareRow.innerHTML = `<button class="btn ghost fshare-btn" type="button">🖼 画像でシェア</button>
+<button class="btn ghost fshare-btn" type="button" data-act="like" data-slug="${p.slug}"${feedLiked ? " disabled style=opacity:.5" : ""}>👏 いいね <span data-likes="${p.slug}">${feedLikeN === undefined ? "…" : feedLikeN}</span></button>`;
 shareRow.querySelector("button").addEventListener("click", () => openPostModal(p, r));
 li.querySelector(".fbody").appendChild(shareRow);
 /* フィードのアバターもクリックだけでなく、キーボードで選べるようにする。
