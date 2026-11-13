@@ -600,6 +600,10 @@ const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
 if (sameDay(d, yesterday)) return `昨日 ${time}`;
 return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 }
+/* 新着バッジの表示時間：届いてから5分だけ「新着」にする。
+ * （5分を過ぎたつぶやきまで新着に見えると、見守る人が
+ *  「いま届いた声」を見分けられなくなるため） */
+const NEW_BADGE_MS = 5 * 60 * 1000;
 function addPost(p, { prepend = true, highlight = false} = {}) {
 posts.push(p);
 updateTodayPostCount(); /* 新しいつぶやきが届いたら、ヘッダーの「今日のつぶやき」件数もすぐ更新する */
@@ -632,6 +636,12 @@ li.querySelector("img").addEventListener("click", () => gotoResident(r));
 li.querySelector("img").addEventListener("keydown", (e) => {
 if (e.key === "Enter" || e.key === " ") { e.preventDefault(); gotoResident(r); }
 });
+/* 新着バッジは5分で消える：届いた直後だけ「新着」にし、時間が経った
+ * つぶやきまで新着に見えないようにする。シード投稿は highlight=false
+ * なので対象外。li が60件制限で消えていても querySelector は無害。 */
+if (highlight) {
+setTimeout(() => { const b = li.querySelector(".fnew"); if (b) b.remove(); }, NEW_BADGE_MS);
+}
 if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
 applyFeedFilter(); /* 絞り込み中なら、新しく届いた推し以外の投稿はすぐ隠す */
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
