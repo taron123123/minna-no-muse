@@ -595,7 +595,14 @@ function fmtFeedTime(d) {
 const time = fmtTime(d);
 const now = new Date();
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-if (sameDay(d, now)) return time;
+if (sameDay(d, now)) {
+/* 当日で1時間以内なら「◯分前」にする：届いたばかりの声は「何時」より
+ * 「何分前」で読めるほうが、いまの活気がすぐ伝わる。1分未満は「たった今」。 */
+const diffMin = Math.floor((now - d) / 60000);
+if (diffMin < 1) return "たった今";
+if (diffMin < 60) return `${diffMin}分前`;
+return time;
+}
 const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
 if (sameDay(d, yesterday)) return `昨日 ${time}`;
 return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
@@ -616,7 +623,7 @@ li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt="${escapeHtml(r.name)}
 <div class="fbody">
 <div class="fhead"><span class="fname">${escapeHtml(r.name)}</span><span class="fstar">${follows.includes(p.slug)? " ⭐": ""}</span>
 <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
-・${escapeHtml(r.pref)}・${fmtFeedTime(p.time)}${highlight ? `<span class="fnew">🆕 新着</span>` : ""}</div>
+・${escapeHtml(r.pref)}・<span class="ftime" data-t="${p.time.toISOString()}">${fmtFeedTime(p.time)}</span>${highlight ? `<span class="fnew">🆕 新着</span>` : ""}</div>
 <div class="ftext">${escapeHtml(p.text)}</div>
 </div>`;
 const shareRow = document.createElement("div");
@@ -646,6 +653,17 @@ if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
 applyFeedFilter(); /* 絞り込み中なら、新しく届いた推し以外の投稿はすぐ隠す */
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
+
+/* フィードの「◯分前」は時間が経つと古くなるので、1分ごとに表示を更新する。
+ * 60分を過ぎれば「時刻」に、深夜を越えれば「昨日 時刻」に切り替わる。
+ * フィードに投稿が無ければ何もしない。 */
+function refreshFeedTimes() {
+feedEl.querySelectorAll(".ftime").forEach(el => {
+const t = new Date(el.dataset.t);
+if (!isNaN(t)) el.textContent = fmtFeedTime(t);
+});
+}
+setInterval(refreshFeedTimes, 60 * 1000);
 
 /* フィードの推し⭐表示をフォロー切り替え時に更新する（既に並んでいる投稿も対象）。
  * 投稿を作るときの ⭐ は addPost で付けている。 */
