@@ -651,6 +651,14 @@ setTimeout(() => { const b = li.querySelector(".fnew"); if (b) b.remove(); }, NE
 }
 if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
 applyFeedFilter(); /* 絞り込み中なら、新しく届いた推し以外の投稿はすぐ隠す */
+/* 新着が届いたのにフィードを下まで読んでいると、先頭の新着に気づけない。
+ * スクロール位置が下にあり、新着が表示されている場合だけ、上部の
+ * 「新しいつぶやきが届きました」ボタンを出す。シード投稿は highlight=false
+ * なので対象外。絞り込み中で隠れた投稿では出さない。 */
+if (highlight && feedEl.scrollTop > 0 && li.style.display !== "none") {
+const btn = document.getElementById("feedNewBtn");
+if (btn) btn.hidden = false;
+}
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
 
@@ -711,6 +719,14 @@ const note = document.getElementById("feedFilterNote");
 if (note) note.textContent = feedOnlyFollows ? "推しのつぶやきだけ表示しています" : "";
 applyFeedFilter();
 });
+}
+
+/* 「新しいつぶやきが届きました」ボタン：押すとフィードの先頭へ戻る。
+ * 自分で上までスクロールしたらボタンは消える。 */
+const feedNewBtn = document.getElementById("feedNewBtn");
+if (feedNewBtn) {
+feedNewBtn.addEventListener("click", () => { feedEl.scrollTop = 0; feedNewBtn.hidden = true; });
+feedEl.addEventListener("scroll", () => { if (feedEl.scrollTop === 0) feedNewBtn.hidden = true; });
 }
 
 /* シード投稿を時系列に流し込む */
