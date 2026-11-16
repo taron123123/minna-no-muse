@@ -156,6 +156,10 @@ const residents = new Map(); // slug -> resident state
 const likesCache = new Map();
 let follows = MinnaData.getFollows();
 let liked = MinnaData.getLiked();
+/* 投稿の一覧。フィード表示用に蓄積するが、住人一覧（renderList）も
+ * 各住人の「最新のつぶやき」時刻を読むため、フィード節より前で宣言する
+ * （起動時の renderList() 呼び出しより後だと TDZ で落ちるため）。 */
+const posts = []; // {slug, text, kind, time:Date}
 
 function addResident(r) {
 if (residents.has(r.slug)) return residents.get(r.slug);
@@ -525,6 +529,16 @@ map.flyTo(r.pos, Math.max(map.getZoom(), GOTO_ZOOM), { duration: 1.0});
 setTimeout(() => r.marker && r.marker.openPopup(), 1050);
 }
 
+/* その住人の最新のつぶやき（posts の中で time がいちばん新しいもの）。
+ * 住人一覧の「💬 最新 ◯分前」表示に使う。投稿が無ければ null。
+ * （プロフィールの「最新のつぶやき」も同じ条件で引いている） */
+function latestPostOf(slug) {
+let latest = null;
+for (const p of posts) {
+if (p.slug === slug && (!latest || p.time > latest.time)) latest = p;
+}
+return latest;
+}
 /* ================= 住人一覧 ================= */
 const listEl = document.getElementById("museList");
 function renderList() {
@@ -536,9 +550,15 @@ const ordered = [...residents.values()].sort((a, b) =>
 ordered.forEach(r => {
 const li = document.createElement("li");
 const likeN = likesCache.get(r.slug);
+/* 住人一覧に「💬 最新 ◯分前」を付ける：地図で会いに行く前に、その子が
+ * 最近動いているか（＝いま声を届けているか）が一覧だけで分かるように。
+ * 時刻は fmtFeedTime と同じ「◯分前／時刻／昨日 時刻」で、1分ごとの
+ * refreshFeedTimes で自動更新される。投稿がまだ無い子は空欄のまま。 */
+const latest = latestPostOf(r.slug);
+li.dataset.slug = r.slug;
 li.innerHTML = `<img src="${safeAvatarSrc(r.avatar)}" alt=""${avatarStyle(r)}>
 <div><span class="nm">${escapeHtml(r.name)}</span> <span class="badge ${BADGE_CLASS[r.badge] || "resident"}">${BADGE_LABEL[r.badge] || "住人"}</span>
-${follows.includes(r.slug)? "⭐": ""}<br><span class="rg">${escapeHtml(r.pref)} ／ ${escapeHtml(r.status)}</span></div>
+${follows.includes(r.slug)? "⭐": ""}<br><span class="rg">${escapeHtml(r.pref)} ／ ${escapeHtml(r.status)}</span><br><span class="llatest">${latest ? `💬 最新 <span class="ftime" data-t="${latest.time.toISOString()}">${fmtFeedTime(latest.time)}</span>` : ""}</span></div>
 <span class="lk">👏 ${likeN === undefined? "…": likeN}</span>`;
 /* 住人一覧はクリック操作だけでなく、キーボードでも選べるようにする。
  * （従来は li の click のみで、Tab 移動や Enter/Space では地図へ飛べなかった） */
@@ -552,6 +572,19 @@ if (e.key === "Enter" || e.key === " ") { e.preventDefault(); gotoResident(r); }
 listEl.appendChild(li);
 });
 updateCounts();
+}
+/* 新しいつぶやきが届いたら、住人一覧のその子の「💬 最新」表示だけを更新する。
+ * 一覧全体を作り直すとスクロール位置が飛ぶため、対象の行だけを書き換える。
+ * 投稿が無い子の空の .llatest もここで初めて埋まる（起動時は seed／Firestore の
+ * 投稿がまだ届いていないため）。 */
+function refreshListLatest(slug) {
+const li = listEl.querySelector(`li[data-slug="${slug}"]`);
+if (!li) return;
+const span = li.querySelector(".llatest");
+if (!span) return;
+const latest = latestPostOf(slug);
+if (!latest) return;
+span.innerHTML = `💬 最新 <span class="ftime" data-t="${latest.time.toISOString()}">${fmtFeedTime(latest.time)}</span>`;
 }
 function updateCounts() {
 document.getElementById("museCount").textContent = residents.size;
@@ -585,7 +618,6 @@ renderList();
 
 /* ================= フィード ================= */
 const feedEl = document.getElementById("feed");
-const posts = []; // {slug, text, kind, time:Date}
 function fmtTime(d) {
 return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit"});
 }
@@ -614,6 +646,7 @@ const NEW_BADGE_MS = 5 * 60 * 1000;
 function addPost(p, { prepend = true, highlight = false} = {}) {
 posts.push(p);
 updateTodayPostCount(); /* 新しいつぶやきが届いたら、ヘッダーの「今日のつぶやき」件数もすぐ更新する */
+refreshListLatest(p.slug); /* 住人一覧のその子の「💬 最新」表示もすぐ更新する */
 const r = residents.get(p.slug);
 if (!r) return;
 const li = document.createElement("li");
@@ -662,11 +695,11 @@ if (btn) btn.hidden = false;
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
 
-/* フィードの「◯分前」は時間が経つと古くなるので、1分ごとに表示を更新する。
+/* フィードと住人一覧の「◯分前」は時間が経つと古くなるので、1分ごとに表示を更新する。
  * 60分を過ぎれば「時刻」に、深夜を越えれば「昨日 時刻」に切り替わる。
- * フィードに投稿が無ければ何もしない。 */
+ * フィードにも一覧にも投稿が無ければ何もしない。 */
 function refreshFeedTimes() {
-feedEl.querySelectorAll(".ftime").forEach(el => {
+document.querySelectorAll(".ftime").forEach(el => {
 const t = new Date(el.dataset.t);
 if (!isNaN(t)) el.textContent = fmtFeedTime(t);
 });
