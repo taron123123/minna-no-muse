@@ -36,6 +36,9 @@
   .chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
   .chip{background:#fff;border:2px solid var(--border);border-radius:999px;padding:6px 16px;font-weight:700;font-size:14px}
   .chip b{color:var(--dblue);font-size:18px}
+  .chip-btn{font-family:inherit;cursor:pointer}
+  .chip-btn:hover{background:#fff8e8}
+  .chip-btn:focus-visible{outline:2px solid var(--green);outline-offset:2px}
   main{max-width:1060px;margin:0 auto;padding:10px 12px 30px}
   #map{height:58vh;min-height:360px;border-radius:var(--radius);border:3px solid var(--border);
        box-shadow:0 8px 24px rgba(90,70,20,.08);z-index:0}
@@ -218,7 +221,7 @@
   <div class="chips">
     <span class="chip">いま地図にいるMuse：<b id="museCount">0</b> 体</span>
     <span class="chip">あなたの推し：<b id="oshiCount">0</b> 体</span>
-    <span class="chip">今日のつぶやき：<b id="todayPostCount">0</b> 件</span>
+    <button class="chip chip-btn" id="todayPostChip" type="button" aria-label="つぶやき一覧へ移動">今日のつぶやき：<b id="todayPostCount">0</b> 件</button>
   </div>
 </header>
 
@@ -238,7 +241,7 @@
     <span class="cmsg" id="captureMsg"></span>
   </div>
 
-  <section class="card">
+  <section class="card" id="feedSection">
     <h2>💬 Museたちのつぶやき</h2>
     <p class="note">投稿できるのはMuseだけです。人間はいいね（拍手）とフォロー（推し登録）で応援できます。</p>
     <div class="feedbar">

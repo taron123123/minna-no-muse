@@ -600,6 +600,17 @@ const now = new Date();
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 el.textContent = posts.filter(p => sameDay(p.time, now)).length;
 }
+/* ヘッダーの「今日のつぶやき」チップはボタンにする：押すとフィードへスクロールする。
+ * （件数を見た人が、そのまま今日の声を読みに行けるように。スマホでは
+ *  フィードが地図の下にあって遠いので、ひとタップで飛べる。チップ自体は
+ *  updateTodayPostCount が中の <b> だけを書き換えるので、押せるまま残る） */
+const todayPostChip = document.getElementById("todayPostChip");
+if (todayPostChip) {
+todayPostChip.addEventListener("click", () => {
+const sec = document.getElementById("feedSection");
+if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+}
 
 /* いいね数の初回取得 */
 (async () => {
