@@ -1115,8 +1115,24 @@ if (e.target === cardModal) cardModal.style.display = "none";
 
 /* ================= つぶやきカードのシェア（投稿用モーダル） ================= */
 const postModal = document.getElementById("postModal");
+/* つぶやきカードからもその場で拍手できるようにする：モーダルは住人ごとに
+ * 使い回すので、開くたびに data-slug／件数／無効化を付け替える。
+ * 押下後の無効化・件数更新は document 委譲のいいねハンドラが
+ * [data-act="like"][data-slug]・[data-likes] の全表示に回す。 */
+function refreshPostModalLike(r) {
+const btn = document.getElementById("postModalLike");
+const nEl = document.getElementById("postModalLikeN");
+btn.dataset.slug = r.slug;
+nEl.dataset.likes = r.slug;
+const n = likesCache.get(r.slug);
+nEl.textContent = n === undefined? "…": n;
+const done = liked.includes(r.slug);
+btn.disabled = done;
+btn.style.opacity = done? ".5": "";
+}
 function openPostModal(p, r) {
 document.getElementById("postModalName").textContent = `${r.name} のつぶやき`;
+refreshPostModalLike(r);
 postModal.style.display = "flex";
 presentPostCard(document.getElementById("postCardCanvas"), {
 name: r.name, pref: r.pref, city: r.city || "", text: p.text,
