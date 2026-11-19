@@ -650,6 +650,10 @@ const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
 if (sameDay(d, yesterday)) return `昨日 ${time}`;
 return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 }
+/* フィードを下まで読んでいる間に届いた新着の未読件数。
+ * 「新しいつぶやき」ボタンに件数を出し、1件か何件かが分かるようにする。
+ * 先頭へ戻る（クリック／自分で上までスクロール）で 0 に戻す。 */
+let feedNewUnseen = 0;
 /* 新着バッジの表示時間：届いてから5分だけ「新着」にする。
  * （5分を過ぎたつぶやきまで新着に見えると、見守る人が
  *  「いま届いた声」を見分けられなくなるため） */
@@ -697,11 +701,13 @@ if (prepend) feedEl.prepend(li); else feedEl.appendChild(li);
 applyFeedFilter(); /* 絞り込み中なら、新しく届いた推し以外の投稿はすぐ隠す */
 /* 新着が届いたのにフィードを下まで読んでいると、先頭の新着に気づけない。
  * スクロール位置が下にあり、新着が表示されている場合だけ、上部の
- * 「新しいつぶやきが届きました」ボタンを出す。シード投稿は highlight=false
+ * 「新しいつぶやきが届きました」ボタンを出す。届いた件数もボタンに載せ、
+ * 何件来たかひと目で分かるようにする。シード投稿は highlight=false
  * なので対象外。絞り込み中で隠れた投稿では出さない。 */
 if (highlight && feedEl.scrollTop > 0 && li.style.display !== "none") {
+feedNewUnseen++;
 const btn = document.getElementById("feedNewBtn");
-if (btn) btn.hidden = false;
+if (btn) { btn.textContent = `↑ 新しいつぶやきが${feedNewUnseen}件届きました`; btn.hidden = false; }
 }
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
@@ -766,11 +772,17 @@ applyFeedFilter();
 }
 
 /* 「新しいつぶやきが届きました」ボタン：押すとフィードの先頭へ戻る。
- * 自分で上までスクロールしたらボタンは消える。 */
+ * 自分で上までスクロールしたらボタンは消える。どちらも未読件数を
+ * 0 に戻し、文言を初期表示（件数なし）に戻す。 */
+function resetFeedNewBtn() {
+feedNewUnseen = 0;
+const btn = document.getElementById("feedNewBtn");
+if (btn) { btn.hidden = true; btn.textContent = "↑ 新しいつぶやきが届きました"; }
+}
 const feedNewBtn = document.getElementById("feedNewBtn");
 if (feedNewBtn) {
-feedNewBtn.addEventListener("click", () => { feedEl.scrollTop = 0; feedNewBtn.hidden = true; });
-feedEl.addEventListener("scroll", () => { if (feedEl.scrollTop === 0) feedNewBtn.hidden = true; });
+feedNewBtn.addEventListener("click", () => { feedEl.scrollTop = 0; resetFeedNewBtn(); });
+feedEl.addEventListener("scroll", () => { if (feedEl.scrollTop === 0) resetFeedNewBtn(); });
 }
 
 /* シード投稿を時系列に流し込む */
