@@ -1349,3 +1349,19 @@ document.getElementById("shotModalClose").addEventListener("click", closeShotMod
 shotModal.addEventListener("click", (e) => {
 if (e.target === shotModal) closeShotModal();
 });
+
+/* ================= モーダルを Escape キーで閉じる =================
+ * 地図のポップアップは Leaflet 標準で Esc キーで閉じるのに、住民票カード／
+ * つぶやきカード／撮影結果の3つのモーダルは「閉じる」ボタンか背景タップ
+ * でしか閉じられず、キーボードだけで操作する見守り人や、撮影後に素早く
+ * 地図へ戻りたい人が不便だった。Esc キーひとつで閉じられるようにする。
+ * 撮影モーダルは動画も止める closeShotModal を流用する。複数開いている
+ * ことは想定していないが、開いていたら1回の Esc で1つだけ閉じる。 */
+function closeOpenModal() {
+  if (shotModal.style.display === "flex") { closeShotModal(); return; }
+  if (postModal.style.display === "flex") { postModal.style.display = "none"; return; }
+  if (cardModal.style.display === "flex") { cardModal.style.display = "none"; return; }
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeOpenModal();
+});
