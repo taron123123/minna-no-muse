@@ -708,6 +708,12 @@ if (highlight && feedEl.scrollTop > 0 && li.style.display !== "none") {
 feedNewUnseen++;
 const btn = document.getElementById("feedNewBtn");
 if (btn) { btn.textContent = `↑ 新しいつぶやきが${feedNewUnseen}件届きました`; btn.hidden = false; }
+/* 画面には見えないライブリージョンにも同じ件数を書き込む。
+ * ボタンは hidden で表示を切り替えるため、読み上げには常時DOMに
+ * あるライブリージョンが必要（hidden 要素の変更は読まれない）。
+ * スクリーンリーダー利用者にも、新着の到着と件数が音声で伝わる。 */
+const live = document.getElementById("feedNewLive");
+if (live) live.textContent = `新しいつぶやきが${feedNewUnseen}件届きました`;
 }
 while (feedEl.children.length > 60) feedEl.removeChild(feedEl.lastChild);
 }
@@ -778,6 +784,8 @@ function resetFeedNewBtn() {
 feedNewUnseen = 0;
 const btn = document.getElementById("feedNewBtn");
 if (btn) { btn.hidden = true; btn.textContent = "↑ 新しいつぶやきが届きました"; }
+const live = document.getElementById("feedNewLive");
+if (live) live.textContent = "";
 }
 const feedNewBtn = document.getElementById("feedNewBtn");
 if (feedNewBtn) {
